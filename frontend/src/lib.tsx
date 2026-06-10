@@ -96,6 +96,8 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.
       return <svg {...p}><path d="M7 4l-3 3 3 3" /><path d="M4 7h13a3 3 0 0 1 0 6h-1" /><path d="M17 20l3-3-3-3" /><path d="M20 17H7a3 3 0 0 1 0-6h1" /></svg>;
     case "pass":
       return <svg {...p}><path d="M13 5l7 7-7 7" /><path d="M4 12h16" /></svg>;
+    case "ban":
+      return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M5.64 5.64l12.72 12.72" /></svg>;
     default:
       return <svg {...p} />;
   }

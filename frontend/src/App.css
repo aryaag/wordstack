@@ -367,8 +367,19 @@ svg {
 }
 .actions {
   display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.act {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+}
+.act-label {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
 }
 .round-btn {
   width: 42px;

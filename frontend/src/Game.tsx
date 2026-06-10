@@ -193,29 +193,44 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
               <div className="actions">
                 {staged.size > 0 ? (
                   <>
-                    <button className="round-btn" onClick={recall} aria-label="Recall tiles">
-                      <Icon name="undo" size={18} />
-                    </button>
-                    <button className="round-btn" onClick={shuffle} aria-label="Shuffle rack">
-                      <Icon name="shuffle" size={18} />
-                    </button>
-                    <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Complete turn">
-                      <Icon name="check" size={22} />
-                    </button>
+                    <div className="act">
+                      <button className="round-btn" onClick={recall} aria-label="Recall tiles">
+                        <Icon name="undo" size={18} />
+                      </button>
+                      <span className="act-label">recall</span>
+                    </div>
+                    <div className="act">
+                      <button className="round-btn" onClick={shuffle} aria-label="Shuffle rack">
+                        <Icon name="shuffle" size={18} />
+                      </button>
+                      <span className="act-label">shuffle</span>
+                    </div>
+                    <div className="act">
+                      <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Submit">
+                        <Icon name="check" size={22} />
+                      </button>
+                      <span className="act-label">submit</span>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <button className="round-btn" onClick={() => room.pass()} aria-label="Pass">
-                      <Icon name="pass" size={18} />
-                    </button>
-                    <button
-                      className="round-btn"
-                      onClick={swap}
-                      disabled={selected === null || state.bagCount === 0}
-                      aria-label="Swap selected tile"
-                    >
-                      <Icon name="swap" size={18} />
-                    </button>
+                    <div className="act">
+                      <button className="round-btn" onClick={() => room.pass()} aria-label="Pass">
+                        <Icon name="ban" size={18} />
+                      </button>
+                      <span className="act-label">pass</span>
+                    </div>
+                    <div className="act">
+                      <button
+                        className="round-btn"
+                        onClick={swap}
+                        disabled={selected === null || state.bagCount === 0}
+                        aria-label="Swap selected tile"
+                      >
+                        <Icon name="swap" size={18} />
+                      </button>
+                      <span className="act-label">swap</span>
+                    </div>
                   </>
                 )}
               </div>
