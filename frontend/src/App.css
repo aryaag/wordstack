@@ -230,11 +230,33 @@ svg {
 }
 .board {
   display: grid;
-  grid-template-columns: repeat(10, var(--tile));
+  grid-template-columns: repeat(10, 1fr);
   gap: 2px;
   padding: 6px;
   background: var(--bg-board);
   border-radius: var(--r-md);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  container-type: inline-size;
+}
+/* Board tiles fill their grid cell and scale font to the board width (cqi). */
+.board .tile,
+.board .cell-empty {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  font-size: 4.4cqi;
+  border-radius: 13%;
+}
+.board .tile .num {
+  font-size: 3.1cqi;
+  top: 1px;
+  right: 3px;
+}
+.board .cell-empty.center::after {
+  width: 22%;
+  height: 22%;
 }
 .rail {
   display: flex;
@@ -280,7 +302,7 @@ svg {
 
 /* ── Banner + rack tray ───────────────────────────────────────────────── */
 .banner {
-  margin: 4px 14px 0;
+  margin: 10px 0 0;
   padding: 9px 13px;
   border-radius: var(--r-lg);
   background: var(--info-bg);
@@ -303,7 +325,7 @@ svg {
   font-weight: 500;
 }
 .preview {
-  margin: 8px 14px 0;
+  margin: 8px 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -325,7 +347,7 @@ svg {
   display: inline-block;
 }
 .tray {
-  margin: 12px 14px 18px;
+  margin: 12px 0 0;
   padding: 11px;
   border-radius: var(--r-lg);
   background: var(--bg-soft);
@@ -964,5 +986,161 @@ svg {
 }
 .vote-btn.no.on {
   background: var(--warn-bg);
+  border-color: var(--warn-fg);
+}
+
+/* ── Game layout (mobile column → wide two-column) ────────────────────── */
+.game-body {
+  display: flex;
+  flex-direction: column;
+}
+.game-main {
+  padding: 14px;
+}
+.game-side {
+  display: none;
+  padding: 14px;
+  flex-direction: column;
+  gap: 12px;
+}
+.menu-btn {
+  display: inline-flex;
+}
+@media (min-width: 760px) {
+  .app-game {
+    max-width: 1000px;
+  }
+  .game-body {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .game-main {
+    flex: 1.5;
+    min-width: 0;
+  }
+  .game-side {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+  }
+  .menu-btn {
+    display: none;
+  }
+}
+
+/* ── Scoreboard + history panels (side panel / menu drawer) ───────────── */
+.gpanel {
+  background: var(--bg-app);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+}
+.ph {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-soft);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+}
+.prow.you {
+  background: var(--info-bg);
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+}
+.av {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  flex: none;
+}
+.pn {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ps {
+  font-size: 14px;
+  font-weight: 500;
+}
+.gpanel .turn {
+  display: block;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.gpanel .turn:last-child {
+  border-bottom: none;
+}
+.tl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tname {
+  font-size: 13px;
+  font-weight: 500;
+}
+.twhen {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.tw {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+.gpanel .wchip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+}
+.gpanel .wchip b {
+  font-weight: 500;
+}
+.gpanel .wchip span {
+  color: var(--good-fg);
+  margin-left: 4px;
+}
+.menu-body {
+  overflow: auto;
+  padding: 4px 14px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Leave confirmation ───────────────────────────────────────────────── */
+.confirm-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.confirm-btns .cta {
+  margin-top: 0;
+}
+.cta.danger {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
   border-color: var(--warn-fg);
 }

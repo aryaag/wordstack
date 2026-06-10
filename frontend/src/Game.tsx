@@ -7,8 +7,8 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
-import { Board, cellKey, Rail, type Overlay } from "./board";
-import { HistoryPanel, StackInspector, TurnReview, type InspectLayer } from "./overlays";
+import { Board, cellKey, type Overlay } from "./board";
+import { ConfirmLeave, GameInfo, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { AVATAR_COLORS, displayLetter, Icon, initials, Tile } from "./lib";
 
 interface Staged {
@@ -22,13 +22,13 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [selected, setSelected] = useState<number | null>(null);
   const [order, setOrder] = useState<number[]>([]);
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const myPlayer = state?.players.find((p) => p.id === me);
   const rackKey = myPlayer ? myPlayer.rack.join(",") : "";
 
-  // Reset placement + rack order whenever my rack changes (move applied / refill).
   useEffect(() => {
     setOrder(myPlayer ? myPlayer.rack.map((_, i) => i) : []);
     setStaged(new Map());
@@ -45,18 +45,12 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
   if (!state || !myPlayer) return null;
 
-  const leaveRoom = () => {
-    room.leave();
-    onLeave();
-  };
   const phase = state.phase;
   const current = state.players[state.turnSeat];
   const isMyTurn = current?.id === me && phase === "playing";
   const myRack = myPlayer.rack;
   const used = new Set([...staged.values()].map((s) => s.rackIndex));
 
-  // Board overlay: provisional tiles. During pending everyone sees the move; on
-  // my turn I see my own staged tiles.
   const overlay: Overlay = new Map();
   if (phase === "pending" && state.pending) {
     for (const p of state.pending.placed) overlay.set(cellKey(p.row, p.col), p.letter);
@@ -94,7 +88,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(selected === i ? null : i);
   };
 
-  // Build + validate the staged move for the live preview.
   const placed: PlacedTile[] = [...staged.entries()].map(([key, v]) => {
     const [r, c] = key.split(",").map(Number);
     return { row: r, col: c, letter: v.letter };
@@ -132,8 +125,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(null);
   };
 
-  const left = state.players.filter((p) => p.seat % 2 === 0);
-  const right = state.players.filter((p) => p.seat % 2 === 1);
   const curCol = AVATAR_COLORS[(current?.seat ?? 0) % 4];
 
   return (
@@ -143,81 +134,85 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           <span className="mini">U</span> Upwords
         </span>
         <span className="right">
-          <button className="icon-btn history" onClick={() => setShowHistory(true)} aria-label="History">
-            <Icon name="history" size={17} /> History
+          <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)} aria-label="Players & history">
+            <Icon name="menu" size={20} />
           </button>
           <span className="room">{state.code}</span>
-          <button className="icon-btn" onClick={leaveRoom} aria-label="Leave">
+          <button className="icon-btn" onClick={() => setConfirmLeave(true)} aria-label="Leave">
             <Icon name="leave" size={19} />
           </button>
         </span>
       </div>
 
-      <div className="play-area">
-        <Rail players={left} activeId={current?.id} />
-        <Board board={state.board} overlay={overlay} onCell={onCell} />
-        <Rail players={right} activeId={current?.id} />
-      </div>
+      <div className="game-body">
+        <div className="game-main">
+          <Board board={state.board} overlay={overlay} onCell={onCell} />
 
-      <div className={`banner${isMyTurn ? "" : " muted-banner"}`}>
-        <span className="who">
-          <span
-            className="avatar"
-            style={{ width: 26, height: 26, fontSize: 11, background: curCol.bg, color: curCol.fg }}
-          >
-            {initials(current?.name ?? "?")}
-          </span>
-          {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
-        </span>
-        <span>{state.bagCount} tiles left</span>
-      </div>
+          <div className={`banner${isMyTurn ? "" : " muted-banner"}`}>
+            <span className="who">
+              <span
+                className="avatar"
+                style={{ width: 26, height: 26, fontSize: 11, background: curCol.bg, color: curCol.fg }}
+              >
+                {initials(current?.name ?? "?")}
+              </span>
+              {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
+            </span>
+            <span>{state.bagCount} tiles left</span>
+          </div>
 
-      {isMyTurn && <div className={`preview${preview?.bad ? " bad" : ""}`}>{preview?.text}</div>}
+          {isMyTurn && <div className={`preview${preview?.bad ? " bad" : ""}`}>{preview?.text}</div>}
 
-      <div className="tray">
-        <div className="rack">
-          {order.map((i) => (
-            <Tile
-              key={i}
-              letter={myRack[i]}
-              selected={i === selected}
-              dim={used.has(i)}
-              tappable={isMyTurn}
-              onClick={isMyTurn ? () => onRackTap(i) : undefined}
-            />
-          ))}
-        </div>
-        {isMyTurn && (
-          <div className="actions">
-            {staged.size > 0 ? (
-              <>
-                <button className="round-btn" onClick={recall} aria-label="Recall tiles">
-                  <Icon name="undo" size={18} />
-                </button>
-                <button className="round-btn" onClick={shuffle} aria-label="Shuffle rack">
-                  <Icon name="shuffle" size={18} />
-                </button>
-                <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Complete turn">
-                  <Icon name="check" size={22} />
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="round-btn" onClick={() => room.pass()} aria-label="Pass">
-                  <Icon name="pass" size={18} />
-                </button>
-                <button
-                  className="round-btn"
-                  onClick={swap}
-                  disabled={selected === null || state.bagCount === 0}
-                  aria-label="Swap selected tile"
-                >
-                  <Icon name="swap" size={18} />
-                </button>
-              </>
+          <div className="tray">
+            <div className="rack">
+              {order.map((i) => (
+                <Tile
+                  key={i}
+                  letter={myRack[i]}
+                  selected={i === selected}
+                  dim={used.has(i)}
+                  tappable={isMyTurn}
+                  onClick={isMyTurn ? () => onRackTap(i) : undefined}
+                />
+              ))}
+            </div>
+            {isMyTurn && (
+              <div className="actions">
+                {staged.size > 0 ? (
+                  <>
+                    <button className="round-btn" onClick={recall} aria-label="Recall tiles">
+                      <Icon name="undo" size={18} />
+                    </button>
+                    <button className="round-btn" onClick={shuffle} aria-label="Shuffle rack">
+                      <Icon name="shuffle" size={18} />
+                    </button>
+                    <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Complete turn">
+                      <Icon name="check" size={22} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="round-btn" onClick={() => room.pass()} aria-label="Pass">
+                      <Icon name="pass" size={18} />
+                    </button>
+                    <button
+                      className="round-btn"
+                      onClick={swap}
+                      disabled={selected === null || state.bagCount === 0}
+                      aria-label="Swap selected tile"
+                    >
+                      <Icon name="swap" size={18} />
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
+
+        <aside className="game-side">
+          <GameInfo state={state} me={me} />
+        </aside>
       </div>
 
       {phase === "pending" && state.pending && (
@@ -230,8 +225,24 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         />
       )}
       {inspect && <StackInspector layers={inspect} players={state.players} onClose={() => setInspect(null)} />}
-      {showHistory && (
-        <HistoryPanel history={state.history} players={state.players} onClose={() => setShowHistory(false)} />
+      {menuOpen && (
+        <div className="scrim bottom" onClick={() => setMenuOpen(false)}>
+          <div className="sheet open" onClick={(e) => e.stopPropagation()}>
+            <div className="grip" />
+            <div className="menu-body">
+              <GameInfo state={state} me={me} />
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmLeave && (
+        <ConfirmLeave
+          onCancel={() => setConfirmLeave(false)}
+          onConfirm={() => {
+            room.leave();
+            onLeave();
+          }}
+        />
       )}
       {toast && <div className="toast">{toast}</div>}
     </>

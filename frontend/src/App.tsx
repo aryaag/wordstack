@@ -67,8 +67,9 @@ export function App() {
 function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {
   const room = useRoom(code, name);
   const { state, connected } = room;
+  const inGame = !!state && (state.phase === "playing" || state.phase === "pending");
   return (
-    <div className="app">
+    <div className={`app${inGame ? " app-game" : ""}`}>
       {!state ? (
         <div className="panel">
           <p className="muted">{connected ? "joining…" : "connecting…"}</p>

@@ -12,6 +12,88 @@ export interface InspectLayer {
   word?: string;
 }
 
+const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
+
+// ── Players scoreboard + move history (side panel on wide; drawer on mobile) ──
+export function GameInfo({ state, me }: { state: PublicState; me: string }) {
+  const current = state.players[state.turnSeat];
+  const ranked = [...state.players].sort((a, b) => b.score - a.score);
+  return (
+    <>
+      <div className="gpanel">
+        <p className="ph">
+          <Icon name="trophy" size={15} /> Players
+        </p>
+        {ranked.map((p) => {
+          const col = colorOf(p);
+          const isCurrent = p.id === current?.id && state.phase !== "gameover";
+          return (
+            <div key={p.id} className={`prow${p.id === me ? " you" : ""}`}>
+              <span className="av" style={{ background: col.bg, color: col.fg }}>
+                {initials(p.name)}
+              </span>
+              <span className="pn">
+                {p.name}
+                {p.id === me ? " · you" : ""}
+                {isCurrent ? " · turn" : ""}
+                {p.connected ? "" : " · away"}
+              </span>
+              <span className="ps">{p.score}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="gpanel">
+        <p className="ph">
+          <Icon name="history" size={15} /> Move history
+        </p>
+        {state.history.length === 0 ? (
+          <p className="empty">No turns played yet.</p>
+        ) : (
+          [...state.history].reverse().map((rec, i) => (
+            <div key={state.history.length - i} className="turn">
+              <div className="tl">
+                <span className="tname">{rec.name}</span>
+                <span className="twhen">{whenLabel(i)}</span>
+              </div>
+              <div className="tw">
+                {rec.words.map((w, j) => (
+                  <span key={j} className="wchip">
+                    <b>{displayLetter(w.word)}</b>
+                    <span>+{w.points}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+}
+
+export function ConfirmLeave({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="scrim" onClick={onCancel}>
+      <div className="card" onClick={(e) => e.stopPropagation()}>
+        <p className="t">Leave the game?</p>
+        <p className="s" style={{ marginTop: 4 }}>
+          If you’re the host, the game ends for everyone.
+        </p>
+        <div className="confirm-btns">
+          <button className="cta" onClick={onCancel}>
+            No, stay
+          </button>
+          <button className="cta danger" onClick={onConfirm}>
+            Yes, leave
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Turn-review popup (post-submit): open stage, then review/voting ──────────
 export function TurnReview({
   state,

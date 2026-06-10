@@ -82,6 +82,16 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.
       return <svg {...p}><path d="M6 6l12 12M18 6L6 18" /></svg>;
     case "copy":
       return <svg {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>;
+    case "menu":
+      return <svg {...p}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
+    case "trophy":
+      return (
+        <svg {...p}>
+          <path d="M7 4h10v5a5 5 0 0 1-10 0z" />
+          <path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" />
+          <path d="M9 20h6M10 20l.5-4M14 20l-.5-4" />
+        </svg>
+      );
     case "swap":
       return <svg {...p}><path d="M7 4l-3 3 3 3" /><path d="M4 7h13a3 3 0 0 1 0 6h-1" /><path d="M17 20l3-3-3-3" /><path d="M20 17H7a3 3 0 0 1 0-6h1" /></svg>;
     case "pass":
