@@ -17,6 +17,14 @@ export interface PendingWord {
   points: number;
 }
 
+/** One committed turn, for the history panel (newest first in the UI). */
+export interface TurnRecord {
+  playerId: string;
+  name: string;
+  words: PendingWord[];
+  total: number;
+}
+
 export interface PendingMove {
   submitterId: string;
   placed: PlacedTile[];
@@ -40,6 +48,14 @@ export interface GameState {
   turnSeat: number;
   consecutivePasses: number;
   pending: PendingMove | null;
+  history: TurnRecord[];
+  /** Per-cell stack of layer metadata, aligned with `board[r][c]` (cellKey "r,c"). */
+  boardMeta: Record<string, LayerMeta[]>;
+}
+
+export interface LayerMeta {
+  by: string; // playerId who placed this layer
+  word: string; // the (longest) word this tile was part of when played
 }
 
 /** What clients receive: full state minus the secret bag order/seed (only the count). */

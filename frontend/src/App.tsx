@@ -1,20 +1,70 @@
 import { useEffect, useState } from "react";
+import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
+import { Landing, Lobby } from "./Landing";
+import { Game } from "./Game";
+import "./App.css";
+
+const roomFromUrl = () => new URLSearchParams(location.search).get("room");
+function setRoomUrl(code: string | null) {
+  const url = new URL(location.href);
+  if (code) url.searchParams.set("room", code);
+  else url.searchParams.delete("room");
+  history.pushState({}, "", url);
+}
 
 export function App() {
-  const [health, setHealth] = useState("checking…");
+  const [code, setCode] = useState<string | null>(roomFromUrl());
+  const [name, setName] = useState(getStoredName());
 
   useEffect(() => {
-    fetch("/health")
-      .then((r) => r.json())
-      .then((d: { ts: number }) => setHealth(`ok · ${new Date(d.ts).toLocaleTimeString()}`))
-      .catch(() => setHealth("unreachable"));
+    const onpop = () => setCode(roomFromUrl());
+    addEventListener("popstate", onpop);
+    return () => removeEventListener("popstate", onpop);
   }, []);
 
+  const go = (c: string | null) => {
+    setRoomUrl(c);
+    setCode(c);
+  };
+
+  if (!code) {
+    return (
+      <div className="app">
+        <Landing
+          name={name}
+          setName={setName}
+          onHost={async () => {
+            setStoredName(name || "Player");
+            go(await createRoom());
+          }}
+          onJoin={(c) => {
+            setStoredName(name || "Player");
+            go(c.toUpperCase());
+          }}
+        />
+      </div>
+    );
+  }
+  return <RoomView code={code} name={name || "Player"} onLeave={() => go(null)} />;
+}
+
+function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {
+  const room = useRoom(code, name);
+  const { state, connected } = room;
   return (
-    <main className="app">
-      <h1>Upwords</h1>
-      <p className="tagline">Stack tiles. Change words. Score.</p>
-      <p className="health">worker: {health}</p>
-    </main>
+    <div className="app">
+      {!state ? (
+        <div className="panel">
+          <p className="muted">{connected ? "joining…" : "connecting…"}</p>
+          <button className="cta" onClick={onLeave}>
+            Back
+          </button>
+        </div>
+      ) : state.phase === "lobby" ? (
+        <Lobby room={room} onLeave={onLeave} />
+      ) : (
+        <Game room={room} onLeave={onLeave} />
+      )}
+    </div>
   );
 }

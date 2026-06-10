@@ -315,13 +315,29 @@ export class Room {
 
     // Accepted: commit the move.
     const submitter = s.players.find((p) => p.id === pending.submitterId)!;
+    // The (longest) word each placed tile is part of — computed on the pre-move board.
+    const formed = extractWords(s.board, pending.placed);
+    const wordFor = (row: number, col: number) =>
+      formed
+        .filter((w) => w.cells.some((c) => c.row === row && c.col === col))
+        .sort((a, b) => b.word.length - a.word.length)[0]?.word ?? "";
     s.board = applyPlacement(s.board, pending.placed);
+    for (const p of pending.placed) {
+      const k = `${p.row},${p.col}`;
+      (s.boardMeta[k] ??= []).push({ by: submitter.id, word: wordFor(p.row, p.col) });
+    }
     submitter.rack = removeTiles(submitter.rack, pending.placed);
     submitter.score += pending.totalPoints;
     const dealt = refill(submitter.rack, s.bag, CONFIG.rackSize);
     submitter.rack = dealt.rack;
     s.bag = dealt.bag;
     s.consecutivePasses = 0;
+    s.history.push({
+      playerId: submitter.id,
+      name: submitter.name,
+      words: pending.words,
+      total: pending.totalPoints,
+    });
     s.pending = null;
     s.phase = "playing";
     this.rotateTurn(s);
@@ -432,6 +448,8 @@ function freshLobby(code: string): GameState {
     turnSeat: 0,
     consecutivePasses: 0,
     pending: null,
+    history: [],
+    boardMeta: {},
   };
 }
 
