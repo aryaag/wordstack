@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlacedTile } from "../../worker/src/engine";
-import type { ClientMessage, PublicState, ServerMessage } from "../../worker/src/protocol";
+import type { ClientMessage, DefineResult, PublicState, ServerMessage } from "../../worker/src/protocol";
 
 const PLAYER_ID_KEY = "upwords:playerId";
 const NAME_KEY = "upwords:name";
@@ -26,6 +26,12 @@ export async function createRoom(): Promise<string> {
   const res = await fetch("/room", { method: "POST" });
   if (!res.ok) throw new Error(`could not create room (${res.status})`);
   return (await res.json()).code as string;
+}
+
+/** GET /define → live Merriam-Webster lookup (Worker proxies + parses; never stored). */
+export async function fetchDefinition(word: string): Promise<DefineResult> {
+  const res = await fetch(`/define?word=${encodeURIComponent(word)}`);
+  return (await res.json()) as DefineResult;
 }
 
 export interface RoomConn {

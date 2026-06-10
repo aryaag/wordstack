@@ -763,6 +763,61 @@ svg {
   color: var(--text-soft);
   font-size: 13px;
 }
+.muted.small {
+  font-size: 12px;
+}
+
+/* ── Definition modal (Merriam-Webster lookup) ────────────────────────────── */
+.define-card {
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
+}
+.define-card .modal-head {
+  align-items: center;
+}
+.avatar.def {
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+.def-close {
+  margin-left: auto;
+  color: var(--text-soft);
+}
+.define-body {
+  overflow: auto;
+  margin: 2px 0 10px;
+}
+.def-entry {
+  margin-bottom: 12px;
+}
+.def-entry:last-child {
+  margin-bottom: 0;
+}
+.def-fl {
+  display: inline-block;
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--info-fg);
+  margin-bottom: 4px;
+}
+.def-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.def-list li {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.def-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+  margin: 0;
+}
 
 /* ── App-bar labeled history button ───────────────────────────────────── */
 .icon-btn {

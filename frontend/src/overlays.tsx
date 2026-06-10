@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { extractWords } from "../../worker/src/engine";
-import type { PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
+import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
+import { fetchDefinition } from "./useRoom";
 import { AVATAR_COLORS, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
@@ -147,6 +148,8 @@ export function TurnReview({
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
+  const [defineWord, setDefineWord] = useState<string | null>(null);
+  const defineModal = defineWord && <DefineModal word={defineWord} onClose={() => setDefineWord(null)} />;
 
   // ── Review / voting stage ──────────────────────────────────────────────
   if (pending.stage === "review") {
@@ -157,6 +160,7 @@ export function TurnReview({
     const votedCount = others.filter((p) => pending.votes[p.id] !== undefined).length;
 
     return (
+      <>
       <div className="scrim">
         <div className="modal">
           <div className="modal-head">
@@ -182,6 +186,11 @@ export function TurnReview({
                   </div>
                   <div className="wordrow">
                     <span className="pill">+{pending.words[i]?.points ?? 0}</span>
+                    <div className="word-actions">
+                      <button className="text-btn define" onClick={() => setDefineWord(w.word)}>
+                        <Icon name="book" size={15} /> Define
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : null,
@@ -217,12 +226,15 @@ export function TurnReview({
           </p>
         </div>
       </div>
+      {defineModal}
+      </>
     );
   }
 
   // ── Open stage (accept / challenge with countdown) ──────────────────────
   const iAccepted = pending.stances[me] === "accepted";
   return (
+    <>
     <div className="scrim">
       <div className="modal">
         <div className="modal-head">
@@ -248,7 +260,7 @@ export function TurnReview({
               <div className="wordrow">
                 <span className="pill">+{pending.words[i]?.points ?? 0}</span>
                 <div className="word-actions">
-                  <button className="text-btn define" disabled title="Definitions arrive in Phase 6">
+                  <button className="text-btn define" onClick={() => setDefineWord(w.word)}>
                     <Icon name="book" size={15} /> Define
                   </button>
                   {!isSubmitter && (
@@ -285,6 +297,74 @@ export function TurnReview({
             <Icon name="check" size={18} /> Okay, looks good
           </button>
         )}
+      </div>
+    </div>
+    {defineModal}
+    </>
+  );
+}
+
+// ── Definition modal (live Merriam-Webster lookup; informational only) ───────
+function DefineModal({ word, onClose }: { word: string; onClose: () => void }) {
+  const [res, setRes] = useState<DefineResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setRes(null);
+    fetchDefinition(word)
+      .then((r) => alive && setRes(r))
+      .catch(() => alive && setRes({ word, error: "Could not reach the dictionary." }))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [word]);
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card define-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <span className="avatar def">
+            <Icon name="book" size={16} />
+          </span>
+          <div>
+            <p className="t">{displayLetter(word)}</p>
+            <p className="s">Merriam-Webster</p>
+          </div>
+          <button className="icon-btn def-close" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+
+        <div className="define-body">
+          {loading ? (
+            <p className="muted">Looking up…</p>
+          ) : res && "error" in res ? (
+            <p className="muted">{res.error}</p>
+          ) : res && res.found ? (
+            res.entries.map((e, i) => (
+              <div key={i} className="def-entry">
+                {e.fl && <span className="def-fl">{e.fl}</span>}
+                <ol className="def-list">
+                  {e.defs.map((d, j) => (
+                    <li key={j}>{d}</li>
+                  ))}
+                </ol>
+              </div>
+            ))
+          ) : (
+            <>
+              <p className="muted">No dictionary entry found for “{displayLetter(word)}”.</p>
+              {res && !res.found && res.suggestions?.length ? (
+                <p className="muted small">Did you mean: {res.suggestions.join(", ")}?</p>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <p className="muted small def-foot">Informational only — this doesn’t affect the vote.</p>
       </div>
     </div>
   );

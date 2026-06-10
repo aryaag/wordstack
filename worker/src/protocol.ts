@@ -76,6 +76,17 @@ export interface DraftPlacement {
 /** What clients receive: full state minus the secret bag order/seed (only the count). */
 export type PublicState = Omit<GameState, "bag" | "seed"> & { bagCount: number };
 
+/** Minimal, parsed Merriam-Webster lookup result returned by GET /define.
+ *  The raw MW payload is parsed in the Worker and discarded — never stored. */
+export interface DefineEntry {
+  fl: string; // part of speech (e.g. "noun")
+  defs: string[]; // 1–3 shortdef strings
+}
+export type DefineResult =
+  | { word: string; found: true; entries: DefineEntry[] }
+  | { word: string; found: false; suggestions?: string[] }
+  | { word: string; error: string };
+
 export type ClientMessage =
   | { type: "join"; playerId: string; name: string }
   | { type: "start_game" }

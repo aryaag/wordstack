@@ -51,3 +51,8 @@ simple = { limit = 15, period = 10 }
 name = "VALIDATE_LIMITER"    # /validate
 namespace_id = "1003"
 simple = { limit = 20, period = 10 }
+
+[[ratelimits]]
+name = "DEFINE_LIMITER"      # /define — protects the MW non-commercial daily quota
+namespace_id = "1004"
+simple = { limit = 8, period = 10 }
