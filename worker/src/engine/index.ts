@@ -20,3 +20,12 @@ export { scoreTurn } from "./scoring";
 export type { TurnScore, WordScore } from "./scoring";
 export { detectTrivialSuffixes } from "./suffixes";
 export type { IsValidWord, SuffixRule, TrivialityResult, WordTriviality } from "./suffixes";
+export {
+  createBag,
+  draw,
+  mulberry32,
+  newShuffledBag,
+  refill,
+  shuffle,
+  TILE_DISTRIBUTION,
+} from "./bag";

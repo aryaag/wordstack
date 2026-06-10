@@ -35,3 +35,19 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# Per-IP rate limits (native Workers Rate Limiting). period must be 10 or 60.
+[[ratelimits]]
+name = "CREATE_LIMITER"      # POST /room — the DO-minting DoS target
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[[ratelimits]]
+name = "WS_LIMITER"          # /room/:code/ws upgrades (lenient — allow reconnects)
+namespace_id = "1002"
+simple = { limit = 15, period = 10 }
+
+[[ratelimits]]
+name = "VALIDATE_LIMITER"    # /validate
+namespace_id = "1003"
+simple = { limit = 20, period = 10 }
