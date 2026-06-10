@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
-import { Landing, Lobby } from "./Landing";
+import { Landing, Lobby, NamePrompt } from "./Landing";
 import { Game } from "./Game";
 import "./App.css";
 
@@ -34,18 +34,33 @@ export function App() {
           name={name}
           setName={setName}
           onHost={async () => {
-            setStoredName(name || "Player");
+            setStoredName(name.trim());
             go(await createRoom());
           }}
           onJoin={(c) => {
-            setStoredName(name || "Player");
+            setStoredName(name.trim());
             go(c.toUpperCase());
           }}
         />
       </div>
     );
   }
-  return <RoomView code={code} name={name || "Player"} onLeave={() => go(null)} />;
+  // A room link was opened without a name yet → ask for it before joining.
+  if (!name.trim()) {
+    return (
+      <div className="app">
+        <NamePrompt
+          code={code}
+          onSubmit={(n) => {
+            setStoredName(n);
+            setName(n);
+          }}
+          onCancel={() => go(null)}
+        />
+      </div>
+    );
+  }
+  return <RoomView code={code} name={name.trim()} onLeave={() => go(null)} />;
 }
 
 function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {

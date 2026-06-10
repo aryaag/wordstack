@@ -125,12 +125,14 @@ export class Room {
     if (existing) {
       existing.connected = true; // reconnect to the same seat + rack
     } else {
+      const cleanName = (name ?? "").trim().slice(0, 24);
+      if (!cleanName) return this.send(ws, { type: "error", message: "please enter a name to join" });
       if (s.phase !== "lobby") return this.send(ws, { type: "error", message: "game already started" });
       if (s.players.length >= 4) return this.send(ws, { type: "error", message: "room is full" });
       const seat = s.players.length;
       s.players.push({
         id: playerId,
-        name: name?.trim() || `Player ${seat + 1}`,
+        name: cleanName,
         seat,
         rack: [],
         score: 0,

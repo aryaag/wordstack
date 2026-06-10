@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RoomConn } from "./useRoom";
+import { getStoredName, type RoomConn } from "./useRoom";
 import { Icon, Tile } from "./lib";
 
 const LOGO = "UPWORDS".split("");
@@ -48,9 +48,10 @@ export function Landing({
         value={name}
         maxLength={16}
         onChange={(e) => setName(e.target.value)}
-        style={{ marginBottom: 14 }}
+        style={{ marginBottom: name.trim() ? 14 : 6 }}
       />
-      <button className="cta primary" onClick={host} disabled={busy}>
+      {!name.trim() && <p className="muted" style={{ margin: "0 0 12px" }}>Enter a name to host or join.</p>}
+      <button className="cta primary" onClick={host} disabled={busy || !name.trim()}>
         <Icon name="plus" /> Host a game
       </button>
 
@@ -66,8 +67,56 @@ export function Landing({
         maxLength={6}
         onChange={(e) => setCode(e.target.value.toUpperCase())}
       />
-      <button className="cta" style={{ marginTop: 10 }} disabled={!code.trim()} onClick={() => onJoin(code.trim())}>
+      <button
+        className="cta"
+        style={{ marginTop: 10 }}
+        disabled={!code.trim() || !name.trim()}
+        onClick={() => onJoin(code.trim())}
+      >
         Join game
+      </button>
+    </div>
+  );
+}
+
+/** Shown when someone opens a room link but hasn't set a name yet. */
+export function NamePrompt({
+  code,
+  onSubmit,
+  onCancel,
+}: {
+  code: string;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(getStoredName());
+  const submit = () => {
+    if (name.trim()) onSubmit(name.trim());
+  };
+  return (
+    <div className="landing">
+      <div className="logo">
+        {LOGO.map((l, i) => (
+          <Tile key={i} letter={l} height={RAISED[i] ?? 1} />
+        ))}
+      </div>
+      <p className="tagline">Joining room {code}</p>
+      <p className="sub">Enter your name so other players know who you are.</p>
+      <input
+        className="field"
+        placeholder="Your name"
+        value={name}
+        maxLength={16}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        style={{ marginBottom: 14 }}
+      />
+      <button className="cta primary" disabled={!name.trim()} onClick={submit}>
+        Join game
+      </button>
+      <button className="cta" style={{ marginTop: 10 }} onClick={onCancel}>
+        Back
       </button>
     </div>
   );
