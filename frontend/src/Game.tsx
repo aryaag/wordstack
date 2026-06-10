@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   DEFAULT_CONFIG,
   extractWords,
@@ -16,6 +16,15 @@ interface Staged {
   rackIndex: number;
 }
 
+/** Where a drag started: a rack slot or an already-staged board cell. */
+type DragSource = { kind: "rack"; rackIndex: number } | { kind: "cell"; key: string };
+
+interface DragGhost {
+  letter: string;
+  x: number;
+  y: number;
+}
+
 export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void }) {
   const { state, me } = room;
   const [staged, setStaged] = useState<Map<string, Staged>>(new Map());
@@ -25,6 +34,10 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [ghost, setGhost] = useState<DragGhost | null>(null);
+  const [hoverCell, setHoverCell] = useState<string | null>(null);
+  // Set true for one tick after a real drag so the trailing click is ignored.
+  const suppressClick = useRef(false);
 
   const myPlayer = state?.players.find((p) => p.id === me);
   const rackKey = myPlayer ? myPlayer.rack.join(",") : "";
@@ -80,6 +93,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   };
 
   const onCell = (r: number, c: number) => {
+    if (suppressClick.current) return;
     if (!isMyTurn) return openInspect(r, c);
     const key = cellKey(r, c);
     if (staged.has(key)) {
@@ -98,8 +112,72 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   };
 
   const onRackTap = (i: number) => {
+    if (suppressClick.current) return;
     if (used.has(i)) return;
     setSelected(selected === i ? null : i);
+  };
+
+  // Move a staged tile onto a target cell, or stage a rack tile there.
+  // A target already holding a different staged tile is left untouched.
+  const dropOnCell = (source: DragSource, letter: string, key: string) => {
+    const m = new Map(staged);
+    if (source.kind === "cell") {
+      if (source.key === key) return;
+      m.delete(source.key);
+    }
+    const occupant = m.get(key);
+    if (occupant) return; // a staged tile already lives here — don't clobber it
+    const rackIndex = source.kind === "rack" ? source.rackIndex : staged.get(source.key)!.rackIndex;
+    m.set(key, { letter, rackIndex });
+    stageTiles(m);
+    setSelected(null);
+  };
+
+  // Dropping a staged tile back over the rack recalls it.
+  const dropOnRack = (source: DragSource) => {
+    if (source.kind !== "cell") return;
+    const m = new Map(staged);
+    m.delete(source.key);
+    stageTiles(m);
+    setSelected(null);
+  };
+
+  // Pointer-based drag (works for touch + mouse). A press that never moves past
+  // the threshold is left alone so the existing tap handlers still fire.
+  const beginDrag = (source: DragSource, letter: string, e: ReactPointerEvent) => {
+    if (!isMyTurn) return;
+    e.preventDefault();
+    const start = { x: e.clientX, y: e.clientY };
+    let moved = false;
+
+    const cellAt = (x: number, y: number) =>
+      document.elementFromPoint(x, y)?.closest("[data-cell]")?.getAttribute("data-cell") ?? null;
+
+    const onMove = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 6) return;
+      moved = true;
+      setGhost({ letter, x: ev.clientX, y: ev.clientY });
+      setHoverCell(cellAt(ev.clientX, ev.clientY));
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setGhost(null);
+      setHoverCell(null);
+      if (!moved) return; // treat as a tap
+      suppressClick.current = true;
+      setTimeout(() => (suppressClick.current = false), 0);
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const cell = el?.closest("[data-cell]")?.getAttribute("data-cell");
+      if (cell) dropOnCell(source, letter, cell);
+      else if (el?.closest("[data-rack]")) dropOnRack(source);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   const placed: PlacedTile[] = mapToPlaced(staged);
@@ -159,7 +237,13 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
       <div className="game-body">
         <div className="game-main">
-          <Board board={state.board} overlay={overlay} onCell={onCell} />
+          <Board
+            board={state.board}
+            overlay={overlay}
+            hoverCell={hoverCell}
+            onCell={onCell}
+            onTilePointerDown={isMyTurn ? (key, e) => beginDrag({ kind: "cell", key }, overlay.get(key)!, e) : undefined}
+          />
 
           <div className={`banner${isMyTurn ? "" : " muted-banner"}`}>
             <span className="who">
@@ -177,7 +261,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           {isMyTurn && <div className={`preview${preview?.bad ? " bad" : ""}`}>{preview?.text}</div>}
 
           <div className="tray">
-            <div className="rack">
+            <div className="rack" data-rack>
               {order.map((i) => (
                 <Tile
                   key={i}
@@ -185,7 +269,13 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                   selected={i === selected}
                   dim={used.has(i)}
                   tappable={isMyTurn}
+                  draggable={isMyTurn && !used.has(i)}
                   onClick={isMyTurn ? () => onRackTap(i) : undefined}
+                  onPointerDown={
+                    isMyTurn && !used.has(i)
+                      ? (e) => beginDrag({ kind: "rack", rackIndex: i }, myRack[i], e)
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -273,6 +363,11 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         />
       )}
       {toast && <div className="toast">{toast}</div>}
+      {ghost && (
+        <div className="drag-ghost" style={{ left: ghost.x, top: ghost.y }}>
+          <Tile letter={ghost.letter} isNew />
+        </div>
+      )}
     </>
   );
 }

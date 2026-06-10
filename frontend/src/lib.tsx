@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, PointerEvent as ReactPointerEvent } from "react";
 
 /** Committed tile faces by height (1..5): light cream → deep gold. */
 export const TILE_FACES = ["#F6E9D2", "#EED9AE", "#E6C887", "#DDB75F", "#D2A23C"];
@@ -29,7 +29,12 @@ export function Tile({
   selected = false,
   dim = false,
   tappable = false,
+  draggable = false,
+  ghost = false,
+  hover = false,
+  dataCell,
   onClick,
+  onPointerDown,
 }: {
   letter: string;
   height?: number;
@@ -37,14 +42,28 @@ export function Tile({
   selected?: boolean;
   dim?: boolean;
   tappable?: boolean;
+  draggable?: boolean;
+  ghost?: boolean;
+  hover?: boolean;
+  dataCell?: string;
   onClick?: () => void;
+  onPointerDown?: (e: ReactPointerEvent) => void;
 }) {
-  const cls = ["tile", isNew && "is-new", selected && "selected", dim && "dim", tappable && "tappable"]
+  const cls = [
+    "tile",
+    isNew && "is-new",
+    selected && "selected",
+    dim && "dim",
+    tappable && "tappable",
+    draggable && "draggable",
+    ghost && "ghost",
+    hover && "drop-hover",
+  ]
     .filter(Boolean)
     .join(" ");
-  const style = isNew ? undefined : { background: TILE_FACES[Math.min(height, 5) - 1] };
+  const style = isNew || ghost ? undefined : { background: TILE_FACES[Math.min(height, 5) - 1] };
   return (
-    <div className={cls} style={style} onClick={onClick}>
+    <div className={cls} style={style} data-cell={dataCell} onClick={onClick} onPointerDown={onPointerDown}>
       {displayLetter(letter)}
       {height > 1 && <span className="num">{height}</span>}
     </div>

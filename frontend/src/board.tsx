@@ -1,3 +1,4 @@
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Board as BoardT } from "../../worker/src/engine";
 import type { PlayerState } from "../../worker/src/protocol";
 import { AVATAR_COLORS, initials, Tile } from "./lib";
@@ -9,11 +10,16 @@ export const cellKey = (r: number, c: number) => `${r},${c}`;
 export function Board({
   board,
   overlay,
+  hoverCell,
   onCell,
+  onTilePointerDown,
 }: {
   board: BoardT;
   overlay: Overlay;
+  hoverCell?: string | null;
   onCell: (r: number, c: number) => void;
+  /** Begin a drag from a provisional (staged) tile at this cell. */
+  onTilePointerDown?: (key: string, e: ReactPointerEvent) => void;
 }) {
   const cells = [];
   for (let r = 0; r < 10; r++) {
@@ -23,16 +29,41 @@ export function Board({
       const committedH = stack.length;
       const top = stack[committedH - 1];
       const ov = overlay.get(key);
+      const isHover = hoverCell === key;
       if (ov) {
-        cells.push(<Tile key={key} letter={ov} height={committedH + 1} isNew tappable onClick={() => onCell(r, c)} />);
+        cells.push(
+          <Tile
+            key={key}
+            letter={ov}
+            height={committedH + 1}
+            isNew
+            tappable
+            draggable
+            hover={isHover}
+            dataCell={key}
+            onClick={() => onCell(r, c)}
+            onPointerDown={onTilePointerDown ? (e) => onTilePointerDown(key, e) : undefined}
+          />,
+        );
       } else if (top) {
-        cells.push(<Tile key={key} letter={top} height={committedH} tappable onClick={() => onCell(r, c)} />);
+        cells.push(
+          <Tile
+            key={key}
+            letter={top}
+            height={committedH}
+            tappable
+            hover={isHover}
+            dataCell={key}
+            onClick={() => onCell(r, c)}
+          />,
+        );
       } else {
         const isCenter = (r === 4 || r === 5) && (c === 4 || c === 5);
         cells.push(
           <div
             key={key}
-            className={`cell-empty target${isCenter ? " center" : ""}`}
+            data-cell={key}
+            className={`cell-empty target${isCenter ? " center" : ""}${isHover ? " drop-hover" : ""}`}
             onClick={() => onCell(r, c)}
           />,
         );
