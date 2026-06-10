@@ -1,5 +1,11 @@
 # Upwords Online — Claude Code Guide
 
+> **TODO (after Phase 7, once live & stable):** split this file — move the deep
+> reference (game rules, scoring, tile distribution, challenge flow, WS protocol)
+> into a repo `docs/` folder and keep this CLAUDE.md lean (stack, conventions,
+> commands, gotchas, links to docs/). Where code is already the source of truth
+> (engine, `protocol.ts`), describe intent and point at the code, don't duplicate.
+
 ## Project overview
 
 Real-time multiplayer web implementation of **Upwords** — the Scrabble-like board game where tiles can be stacked on top of each other to change words. 2–4 players share a room and take turns. Stack height determines scoring. Everything runs on Cloudflare.

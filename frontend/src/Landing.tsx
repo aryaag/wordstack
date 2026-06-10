@@ -124,8 +124,19 @@ export function NamePrompt({
 
 export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }) {
   const { state, me, start } = room;
+  const [copied, setCopied] = useState(false);
   if (!state) return null;
   const isHost = state.hostId === me;
+  const inviteLink = `${location.origin}/?room=${state.code}`;
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+    } catch {
+      /* clipboard unavailable */
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
   return (
     <>
       <div className="appbar">
@@ -145,8 +156,11 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
       </div>
       <div className="panel">
         <h2>Game lobby</h2>
-        <p className="muted">Share this code so friends can join:</p>
+        <p className="muted">Share this code (or the link) so friends can join:</p>
         <p className="code-big">{state.code}</p>
+        <button className="cta" onClick={copyLink} style={{ marginBottom: 16 }}>
+          <Icon name={copied ? "check" : "copy"} /> {copied ? "Invite link copied!" : "Copy invite link"}
+        </button>
         <ul className="players-list">
           {state.players.map((p) => (
             <li key={p.id}>

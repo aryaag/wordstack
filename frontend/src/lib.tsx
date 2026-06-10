@@ -80,6 +80,8 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.
       return <svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
     case "x":
       return <svg {...p}><path d="M6 6l12 12M18 6L6 18" /></svg>;
+    case "copy":
+      return <svg {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>;
     case "swap":
       return <svg {...p}><path d="M7 4l-3 3 3 3" /><path d="M4 7h13a3 3 0 0 1 0 6h-1" /><path d="M17 20l3-3-3-3" /><path d="M20 17H7a3 3 0 0 1 0-6h1" /></svg>;
     case "pass":
