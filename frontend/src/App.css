@@ -204,10 +204,10 @@ svg {
   z-index: 1000;
   pointer-events: none;
   transform: translate(-50%, -60%) scale(1.12);
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.24));
 }
 .drag-ghost .tile {
-  --tile: 44px;
+  --tile: 38px;
 }
 .tile.selected {
   outline: 2px solid var(--info-fg);
