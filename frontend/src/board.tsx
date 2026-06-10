@@ -28,7 +28,14 @@ export function Board({
       } else if (top) {
         cells.push(<Tile key={key} letter={top} height={committedH} tappable onClick={() => onCell(r, c)} />);
       } else {
-        cells.push(<div key={key} className="cell-empty target" onClick={() => onCell(r, c)} />);
+        const isCenter = (r === 4 || r === 5) && (c === 4 || c === 5);
+        cells.push(
+          <div
+            key={key}
+            className={`cell-empty target${isCenter ? " center" : ""}`}
+            onClick={() => onCell(r, c)}
+          />,
+        );
       }
     }
   }

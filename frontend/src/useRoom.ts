@@ -37,8 +37,10 @@ export interface RoomConn {
   submit: (placed: PlacedTile[]) => void;
   challenge: (wordIndex: number) => void;
   acknowledge: () => void;
+  vote: (vote: "allow" | "reject") => void;
   pass: () => void;
   swap: (index: number) => void;
+  leave: () => void;
 }
 
 function wsUrl(code: string): string {
@@ -86,9 +88,10 @@ export function useRoom(code: string | null, name: string): RoomConn {
             setNotice(msg.reason);
             break;
           case "challenge_result":
-            setNotice(
-              msg.challenged.map((c) => `"${c.word}" challenged by ${c.by.length}`).join(", "),
-            );
+            setNotice(msg.challenged.map((c) => `"${c.word}" was challenged`).join(", "));
+            break;
+          case "game_over":
+            setNotice(msg.reason);
             break;
           case "error":
             setNotice(msg.message);
@@ -125,7 +128,9 @@ export function useRoom(code: string | null, name: string): RoomConn {
     submit: (placed) => action({ type: "submit_move", placed }),
     challenge: (wordIndex) => action({ type: "challenge_word", wordIndex }),
     acknowledge: () => action({ type: "acknowledge_move" }),
+    vote: (vote) => action({ type: "vote_move", vote }),
     pass: () => action({ type: "pass" }),
     swap: (index) => action({ type: "swap_tiles", index }),
+    leave: () => action({ type: "leave" }),
   };
 }

@@ -45,6 +45,10 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
   if (!state || !myPlayer) return null;
 
+  const leaveRoom = () => {
+    room.leave();
+    onLeave();
+  };
   const phase = state.phase;
   const current = state.players[state.turnSeat];
   const isMyTurn = current?.id === me && phase === "playing";
@@ -143,7 +147,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             <Icon name="history" size={17} /> History
           </button>
           <span className="room">{state.code}</span>
-          <button className="icon-btn" onClick={onLeave} aria-label="Leave">
+          <button className="icon-btn" onClick={leaveRoom} aria-label="Leave">
             <Icon name="leave" size={19} />
           </button>
         </span>
@@ -217,7 +221,13 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       </div>
 
       {phase === "pending" && state.pending && (
-        <TurnReview state={state} me={me} onChallenge={room.challenge} onAccept={room.acknowledge} />
+        <TurnReview
+          state={state}
+          me={me}
+          onChallenge={room.challenge}
+          onAccept={room.acknowledge}
+          onVote={room.vote}
+        />
       )}
       {inspect && <StackInspector layers={inspect} players={state.players} onClose={() => setInspect(null)} />}
       {showHistory && (

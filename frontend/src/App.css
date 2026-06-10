@@ -201,6 +201,24 @@ svg {
 .cell-empty.target:hover {
   border-color: var(--new-edge);
 }
+/* The four central start squares — the first word must cover one. */
+.cell-empty.center {
+  background: #efe3c8;
+  border-color: var(--line-strong);
+}
+.cell-empty.center::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tile-edge);
+  opacity: 0.55;
+}
+.cell-empty.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ── Board + players ──────────────────────────────────────────────────── */
 .play-area {
@@ -903,4 +921,48 @@ svg {
   font-size: 12px;
   color: var(--text-soft);
   margin-top: 6px;
+}
+
+/* ── Challenge review voting ──────────────────────────────────────────── */
+.vote {
+  text-align: center;
+}
+.vote-q {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+.vote-hint {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+.vote-btns {
+  display: flex;
+  gap: 10px;
+}
+.vote-btn {
+  flex: 1;
+  padding: 14px 8px;
+  border-radius: var(--r-lg);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1.5px solid var(--line-strong);
+  background: var(--bg-app);
+}
+.vote-btn.yes {
+  color: var(--good-fg);
+}
+.vote-btn.yes.on {
+  background: var(--good-bg);
+  border-color: var(--good-fg);
+}
+.vote-btn.no {
+  color: var(--warn-fg);
+}
+.vote-btn.no.on {
+  background: var(--warn-bg);
+  border-color: var(--warn-fg);
 }

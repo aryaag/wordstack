@@ -12,28 +12,29 @@ export interface InspectLayer {
   word?: string;
 }
 
-// ── Turn-review popup (post-submit) ──────────────────────────────────────────
+// ── Turn-review popup (post-submit): open stage, then review/voting ──────────
 export function TurnReview({
   state,
   me,
   onChallenge,
   onAccept,
+  onVote,
 }: {
   state: PublicState;
   me: string;
   onChallenge: (wordIndex: number) => void;
   onAccept: () => void;
+  onVote: (vote: "allow" | "reject") => void;
 }) {
   const pending = state.pending!;
   const submitter = state.players.find((p) => p.id === pending.submitterId);
   const isSubmitter = pending.submitterId === me;
   const formed = extractWords(state.board, pending.placed);
   const col = colorOf(submitter);
+  const others = state.players.filter((p) => p.id !== pending.submitterId);
 
   const challengedIndices = new Set<number>();
   for (const list of Object.values(pending.challenges)) for (const i of list) challengedIndices.add(i);
-  const iChallenged = new Set(pending.challenges[me] ?? []);
-  const iAccepted = pending.stances[me] === "accepted";
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -41,6 +42,80 @@ export function TurnReview({
     return () => clearInterval(t);
   }, []);
 
+  // ── Review / voting stage ──────────────────────────────────────────────
+  if (pending.stage === "review") {
+    const challenger = state.players.find((p) => p.id === pending.challengerId);
+    const challengedWords = [...challengedIndices].map((i) => pending.words[i]?.word).filter(Boolean);
+    const wordsLabel = challengedWords.map((w) => `“${displayLetter(w)}”`).join(" / ");
+    const myVote = pending.votes[me];
+    const votedCount = others.filter((p) => pending.votes[p.id] !== undefined).length;
+
+    return (
+      <div className="scrim">
+        <div className="modal">
+          <div className="modal-head">
+            <span className="avatar" style={{ background: colorOf(challenger).bg, color: colorOf(challenger).fg }}>
+              <Icon name="flag" size={16} />
+            </span>
+            <div>
+              <p className="t">Word under review</p>
+              <p className="s">
+                <b>{challenger?.name ?? "A player"}</b> challenged {wordsLabel || "a word"}
+              </p>
+            </div>
+          </div>
+
+          <div className="wordlist">
+            {formed.map((w, i) =>
+              challengedIndices.has(i) ? (
+                <div key={i} className="wordcard challenged">
+                  <div className="tiles">
+                    {w.cells.map((cell, j) => (
+                      <Tile key={j} letter={cell.letter} height={cell.height} />
+                    ))}
+                  </div>
+                  <div className="wordrow">
+                    <span className="pill">+{pending.words[i]?.points ?? 0}</span>
+                  </div>
+                </div>
+              ) : null,
+            )}
+          </div>
+
+          <div className="divider" />
+
+          {isSubmitter ? (
+            <p className="muted" style={{ textAlign: "center" }}>
+              Your word is under review — players are voting…
+            </p>
+          ) : (
+            <div className="vote">
+              <p className="vote-q">Is {wordsLabel || "the word"} a valid word?</p>
+              <p className="vote-hint">
+                Vote on the word itself — <b>Yes</b> if it’s a real word, <b>No</b> if it isn’t. This is not
+                about whether the challenge was fair.
+              </p>
+              <div className="vote-btns">
+                <button className={`vote-btn yes${myVote === "allow" ? " on" : ""}`} onClick={() => onVote("allow")}>
+                  Yes — it’s valid
+                </button>
+                <button className={`vote-btn no${myVote === "reject" ? " on" : ""}`} onClick={() => onVote("reject")}>
+                  No — not valid
+                </button>
+              </div>
+            </div>
+          )}
+
+          <p className="muted" style={{ textAlign: "center", marginTop: 10 }}>
+            {votedCount}/{others.length} voted · the word plays only if everyone allows it
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Open stage (accept / challenge with countdown) ──────────────────────
+  const iAccepted = pending.stances[me] === "accepted";
   return (
     <div className="scrim">
       <div className="modal">
@@ -58,7 +133,7 @@ export function TurnReview({
 
         <div className="wordlist">
           {formed.map((w, i) => (
-            <div key={i} className={`wordcard${challengedIndices.has(i) ? " challenged" : ""}`}>
+            <div key={i} className="wordcard">
               <div className="tiles">
                 {w.cells.map((cell, j) => (
                   <Tile key={j} letter={cell.letter} height={cell.height} />
@@ -71,12 +146,8 @@ export function TurnReview({
                     <Icon name="book" size={15} /> Define
                   </button>
                   {!isSubmitter && (
-                    <button
-                      className={`text-btn challenge${iChallenged.has(i) ? " challenged" : ""}`}
-                      disabled={iChallenged.has(i)}
-                      onClick={() => onChallenge(i)}
-                    >
-                      <Icon name="flag" size={15} /> {iChallenged.has(i) ? "Challenged" : "Challenge"}
+                    <button className="text-btn challenge" onClick={() => onChallenge(i)}>
+                      <Icon name="flag" size={15} /> Challenge
                     </button>
                   )}
                 </div>
@@ -87,7 +158,7 @@ export function TurnReview({
 
         <div className="divider" />
         <div className="timerrow">
-          <TimerRing seconds={(pending.deadline - now) / 1000} />
+          <TimerRing seconds={pending.deadline ? (pending.deadline - now) / 1000 : 0} />
           <span>
             No challenge? Accepted automatically
             <br />
@@ -109,6 +180,33 @@ export function TurnReview({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── End screen (game over / canceled) ───────────────────────────────────────
+export function EndScreen({ state, onLeave }: { state: PublicState; onLeave: () => void }) {
+  const ranked = [...state.players].sort((a, b) => b.score - a.score);
+  return (
+    <div className="panel" style={{ textAlign: "center" }}>
+      <h2>Game over</h2>
+      <p className="muted">{state.endReason ?? "The game has ended."}</p>
+      <ul className="players-list" style={{ textAlign: "left" }}>
+        {ranked.map((p, i) => (
+          <li key={p.id}>
+            <b>
+              {i === 0 ? "🏆 " : ""}
+              {p.name}
+            </b>
+            <span className="muted" style={{ marginLeft: "auto" }}>
+              {p.score} pts
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button className="cta primary" onClick={onLeave}>
+        Back to home
+      </button>
     </div>
   );
 }

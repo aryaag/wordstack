@@ -22,7 +22,8 @@ import type {
 import type { Env } from "./index";
 
 const CONFIG = DEFAULT_CONFIG;
-const WINDOW_MS = 30_000;
+const WINDOW_MS = 30_000; // open stage: auto-accept countdown
+const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
 
 type Attachment = { playerId: string };
 
@@ -89,7 +90,10 @@ export class Room {
   /** DO Alarm = the 30s challenge-window backstop. */
   async alarm(): Promise<void> {
     await this.serialize(async () => {
-      if (this.state?.phase === "pending") await this.resolve();
+      const p = this.state?.pending;
+      if (!p) return;
+      if (p.stage === "open") await this.commitMove(); // no challenge → auto-accept
+      else await this.finishReview(); // backstop: unvoted counts as allow
     });
   }
 
@@ -106,6 +110,8 @@ export class Room {
         return this.onChallenge(ws, msg.wordIndex);
       case "acknowledge_move":
         return this.onAcknowledge(ws);
+      case "vote_move":
+        return this.onVote(ws, msg.vote);
       case "pass":
         return this.onPass(ws);
       case "swap_tiles":
@@ -189,34 +195,42 @@ export class Room {
     const stances: PendingMove["stances"] = {};
     for (const p of s.players) if (p.id !== player.id) stances[p.id] = "pending";
 
+    const deadline = Date.now() + WINDOW_MS;
     s.pending = {
       submitterId: player.id,
       placed,
       words: score.perWord.map((w) => ({ word: w.word, points: w.points })),
       totalPoints: score.total,
       bingoBonus: score.bingoBonus,
-      deadline: Date.now() + WINDOW_MS,
+      stage: "open",
+      deadline,
       stances,
       challenges: {},
+      votes: {},
+      challengerId: null,
     };
     s.phase = "pending";
-    await this.ctx.storage.setAlarm(s.pending.deadline);
+    await this.ctx.storage.setAlarm(deadline);
     await this.persist();
     this.broadcast({
       type: "move_pending",
       words: s.pending.words,
       totalPoints: s.pending.totalPoints,
       bingoBonus: s.pending.bingoBonus,
-      deadline: s.pending.deadline,
+      deadline,
     });
     this.broadcastState();
-    await this.maybeClose();
+    await this.maybeCloseOpen();
   }
 
+  /** Open stage only: a challenge pauses the timer and moves the table into review/voting. */
   private async onChallenge(ws: WebSocket, wordIndex: number): Promise<void> {
     const s = this.requireState(ws);
     if (!s || !this.requirePending(ws, s)) return;
     const pending = s.pending!;
+    if (pending.stage !== "open") {
+      return this.send(ws, { type: "error", message: "the move is already under review" });
+    }
     const pid = this.playerIdOf(ws);
     if (!pid || pid === pending.submitterId) {
       return this.send(ws, { type: "error", message: "you cannot challenge your own move" });
@@ -225,19 +239,27 @@ export class Room {
     if (wordIndex < 0 || wordIndex >= pending.words.length) {
       return this.send(ws, { type: "error", message: "bad word index" });
     }
-    const list = (pending.challenges[pid] ??= []);
-    if (!list.includes(wordIndex)) list.push(wordIndex);
-
-    await this.persist();
+    (pending.challenges[pid] ??= []).push(wordIndex);
+    // Enter review: pause the auto-accept timer; the challenge counts as the
+    // challenger's "not valid" vote. Everyone else now votes on the word.
+    pending.stage = "review";
+    pending.challengerId = pid;
+    pending.votes = { [pid]: "reject" };
+    pending.deadline = Date.now() + REVIEW_BACKSTOP_MS;
+    await this.ctx.storage.setAlarm(pending.deadline);
     this.broadcast({ type: "challenge_update", playerId: pid, wordIndex });
-    this.broadcastState();
-    await this.maybeClose();
+    await this.persistAndBroadcast();
+    // With a single opponent there's no one else to deliberate with, so this
+    // resolves immediately; with 3–4 players it waits for the others to vote.
+    await this.checkReview();
   }
 
+  /** Open stage: a player accepts the move without challenging. */
   private async onAcknowledge(ws: WebSocket): Promise<void> {
     const s = this.requireState(ws);
     if (!s || !this.requirePending(ws, s)) return;
     const pending = s.pending!;
+    if (pending.stage !== "open") return; // in review, players vote instead
     const pid = this.playerIdOf(ws);
     if (!pid || pid === pending.submitterId) return; // submitter's popup is read-only
     if (!(pid in pending.stances)) return this.send(ws, { type: "error", message: "not in this game" });
@@ -245,7 +267,24 @@ export class Room {
 
     await this.persist();
     this.broadcastState();
-    await this.maybeClose();
+    await this.maybeCloseOpen();
+  }
+
+  /** Review stage: a non-submitter votes whether the word is valid (allow) or not (reject). */
+  private async onVote(ws: WebSocket, vote: "allow" | "reject"): Promise<void> {
+    const s = this.requireState(ws);
+    if (!s || !this.requirePending(ws, s)) return;
+    const pending = s.pending!;
+    if (pending.stage !== "review") return this.send(ws, { type: "error", message: "no vote in progress" });
+    const pid = this.playerIdOf(ws);
+    if (!pid || pid === pending.submitterId) return; // submitter doesn't vote
+    if (!(pid in pending.stances)) return this.send(ws, { type: "error", message: "not in this game" });
+    if (vote !== "allow" && vote !== "reject") return;
+    pending.votes[pid] = vote;
+
+    await this.persist();
+    this.broadcastState();
+    await this.checkReview();
   }
 
   private async onPass(ws: WebSocket): Promise<void> {
@@ -277,45 +316,73 @@ export class Room {
   }
 
   private async onLeave(ws: WebSocket): Promise<void> {
+    const s = this.state;
+    const pid = this.playerIdOf(ws);
+    if (s && pid && pid === s.hostId && s.phase !== "gameover") {
+      return this.cancelGame("The host left — the game was canceled.");
+    }
     await this.webSocketClose(ws);
   }
 
-  // ── Challenge window resolution ────────────────────────────────────────────
-  private async maybeClose(): Promise<void> {
+  private async cancelGame(reason: string): Promise<void> {
     const s = this.state;
-    if (!s || s.phase !== "pending" || !s.pending) return;
-    const pending = s.pending;
-    const others = s.players.filter((p) => p.id !== pending.submitterId);
-    const resolved = (p: PlayerState) =>
-      pending.stances[p.id] === "accepted" || (pending.challenges[p.id]?.length ?? 0) > 0;
-    if (others.every(resolved)) await this.resolve();
+    if (!s) return;
+    await this.ctx.storage.deleteAlarm();
+    s.phase = "gameover";
+    s.pending = null;
+    s.endReason = reason;
+    this.broadcast({ type: "game_over", reason });
+    await this.persistAndBroadcast();
   }
 
-  private async resolve(): Promise<void> {
+  // ── Challenge window resolution ────────────────────────────────────────────
+  /** Open stage: every non-submitter accepted (no challenge) → commit. */
+  private async maybeCloseOpen(): Promise<void> {
+    const s = this.state;
+    if (!s || s.phase !== "pending" || s.pending?.stage !== "open") return;
+    const pending = s.pending;
+    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    if (others.every((p) => pending.stances[p.id] === "accepted")) await this.commitMove();
+  }
+
+  /** Review stage: every non-submitter has voted → tally. */
+  private async checkReview(): Promise<void> {
+    const s = this.state;
+    if (!s || s.phase !== "pending" || s.pending?.stage !== "review") return;
+    const pending = s.pending;
+    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    if (others.every((p) => pending.votes[p.id] !== undefined)) await this.finishReview();
+  }
+
+  /** Any "reject" vote rejects the whole move; otherwise (all allow) it commits. */
+  private async finishReview(): Promise<void> {
+    const s = this.state!;
+    const pending = s.pending!;
+    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    if (others.some((p) => pending.votes[p.id] === "reject")) await this.rejectMove();
+    else await this.commitMove();
+  }
+
+  private async rejectMove(): Promise<void> {
     const s = this.state!;
     const pending = s.pending!;
     await this.ctx.storage.deleteAlarm();
-
-    // Gather challenges: word index → challenger ids.
     const byWord = new Map<number, string[]>();
     for (const [pid, indices] of Object.entries(pending.challenges)) {
       for (const i of indices) byWord.set(i, [...(byWord.get(i) ?? []), pid]);
     }
+    const challenged = [...byWord.entries()].map(([i, by]) => ({ word: pending.words[i].word, by }));
+    this.broadcast({ type: "challenge_result", challenged });
+    this.broadcast({ type: "move_rejected", reason: "the table did not accept the word — replay your turn" });
+    s.pending = null;
+    s.phase = "playing"; // board/rack untouched; same player's turn (replay)
+    await this.persistAndBroadcast();
+  }
 
-    if (byWord.size > 0) {
-      const challenged = [...byWord.entries()].map(([i, by]) => ({ word: pending.words[i].word, by }));
-      this.broadcast({ type: "challenge_result", challenged });
-      this.broadcast({
-        type: "move_rejected",
-        reason: "a word was challenged — the move is rejected; replay your turn",
-      });
-      s.pending = null;
-      s.phase = "playing"; // board/rack untouched; same player's turn (replay)
-      await this.persistAndBroadcast();
-      return;
-    }
-
-    // Accepted: commit the move.
+  private async commitMove(): Promise<void> {
+    const s = this.state!;
+    const pending = s.pending!;
+    await this.ctx.storage.deleteAlarm();
     const submitter = s.players.find((p) => p.id === pending.submitterId)!;
     // The (longest) word each placed tile is part of — computed on the pre-move board.
     const formed = extractWords(s.board, pending.placed);
@@ -452,6 +519,7 @@ function freshLobby(code: string): GameState {
     pending: null,
     history: [],
     boardMeta: {},
+    endReason: null,
   };
 }
 

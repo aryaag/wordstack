@@ -84,40 +84,23 @@ wrangler deploy                                       # worker + assets
 
 Default mode: `"challenge"`. Server config: `VALIDATION_MODE: "auto" | "challenge"` + `challengePenalty: boolean` (default `false`).
 
-**Challenge resolution is by HUMAN CONSENSUS — not the dictionary.** In `"challenge"` mode the D1 lexicon is **not** consulted to decide a challenged word; the non-submitting players decide. A move is accepted only if **every** non-submitting player agrees (explicitly or by timeout) that the words are valid. If even one non-submitter challenges **any** word, the **entire move is rejected**. (D1 is still used for the trivial-suffix secondary check, and for `"auto"` mode if ever enabled.)
+**Challenge resolution is by HUMAN CONSENSUS — not the dictionary.** D1 is never consulted to decide a challenged word (it is only used for the trivial-suffix check). A challenge does **not** reject instantly — it pauses the game into a **review/vote**, and the move plays only if **every** non-submitter allows it. Any single upheld challenge (a "not valid" vote) rejects the whole move.
 
-**Post-submit popup UX (the confirmed design):**
+**Two-stage post-submit flow (confirmed design):**
 
-When a player submits a move, the DO immediately:
-1. Validates placement rules (line, adjacency, height, stacking, trivial-suffix) — hard reject if broken, no popup needed.
-2. Extracts words formed + tentative scores.
-3. Enters `pending` state and sets a **DO Alarm** at submission + 30 seconds as the backstop (alarms survive hibernation; do NOT use `setTimeout`).
-4. Broadcasts `move_pending` to all players: words formed + tentative points per word.
+On submit, the DO hard-validates placement + trivial-suffix (immediate `error` if broken, no popup), extracts words + tentative scores, enters `pending` with **stage `"open"`**, sets a 30s **DO Alarm** (alarms survive hibernation; never `setTimeout`), and broadcasts `move_pending`.
 
-All players see a popup containing a **table, one row per word formed, sorted alphabetically by word**, with columns:
-- **Word**
-- **Points** (tentative)
-- **Actions** — a **View definition** button (on-demand MW lookup for that word) and a **Challenge** button.
+**Open stage** — all players see the words + tentative points. Non-submitters can **Accept** or **Challenge** (the submitter's popup is read-only). A 30s countdown auto-accepts the unresolved. If every non-submitter accepts, or the timer fires with no challenge → the move commits (`move_applied`).
 
-At the bottom of the popup: an **Accept** button and a **30-second countdown**.
+**Review stage** — the moment any non-submitter challenges a word, the move enters **stage `"review"`**: the auto-accept timer **pauses** (a long DO-Alarm backstop only prevents a permanent hang), the table deliberates out loud, and every non-submitter casts a **vote on the word's validity** — framed as *"Is WORD a valid word? Yes (valid) / No (not valid)"*, explicitly **not** a vote on whether the challenge was fair. One clarifying sentence sits directly above the Yes/No buttons. The challenge itself counts as the challenger's **No** vote (they may switch to Yes to withdraw).
 
-- **Submitting player:** the popup is read-only / informational (no Accept or Challenge).
-- **Each non-submitting player** behaves independently:
-  - If they do nothing, their countdown runs and at 0s their stance is **auto-accepted**.
-  - **Any interaction cancels that player's countdown** — including merely opening **View definition**. Once cancelled, that player must explicitly click **Accept** or **Challenge**; they no longer auto-accept.
-  - Each non-submitter's countdown is **independent** of the others'.
-- **Challenge** is per-word and one-way (unchallenged → challenged; cannot undo). When a player challenges a word, the DO broadcasts `challenge_update` so everyone sees it in real time.
-- **View definition** triggers a live MW lookup (see Definitions), shown only to the requesting player; it is informational and never counts as a vote.
+**Resolution** (when all non-submitters have voted, or the backstop fires with unvoted = allow):
+- **All allow** → `move_applied` (committed, scored, rack refilled).
+- **Any reject** → the entire move is rejected: the submitter takes the tiles back and replays. The DO broadcasts `challenge_result` then `move_rejected`. No D1 check, no turn skip for the challenger.
 
-The window closes when every non-submitter has resolved (Accepted, auto-accepted by timeout, or Challenged), with the 30s DO Alarm as a **hard backstop**: when it fires, the window closes regardless, and any non-submitter who has **not** explicitly Challenged counts as Accept — including a player who interacted (cancelling their early auto-accept) but then went idle. This guarantees the window can never hang.
+With a single opponent there is no one else to deliberate with, so a challenge resolves immediately (the lone challenger's No stands). A move is always accepted or rejected as a unit — no partial acceptance.
 
-Outcome:
-- If **no** non-submitter challenged any word → `move_applied` (committed, scored, rack refilled).
-- If **any** non-submitter challenged **any** word → the entire move is rejected: the submitter takes all placed tiles back and replays the turn. **No D1 check, no turn skip for the challenger.** The DO broadcasts `challenge_result` (which words were challenged, by whom), then `move_rejected`.
-
-Note: the entire move is accepted or rejected as a unit — there is no partial acceptance.
-
-The **View definition** action (MW lookup) is a separate part of the same popup from the **Challenge** action; tapping it does not challenge, and it can be used any time the popup is open.
+The **View definition** action (MW lookup, Phase 6) is a separate, informational button and never counts as a vote.
 
 ### Live game state lives in the Durable Object, NOT D1
 - D1 holds only the word lexicon. All board/rack/bag/score/turn state lives in DO storage.
@@ -240,8 +223,9 @@ The DO sends the full game state to every connected client. Each player's rack d
 **Client → Server:**
 - `join` / `leave`
 - `submit_move` — placed tiles; triggers placement validation then the post-submit popup
-- `challenge_word` — word index in the pending move (one-way; sent from the popup's Challenge button)
-- `acknowledge_move` — player clicked "Accept" in the post-submit popup (no challenge)
+- `challenge_word` — word index; in the open stage this opens the review/vote
+- `acknowledge_move` — open stage: accept the move (no challenge)
+- `vote_move` — review stage: `{ vote: "allow" | "reject" }` (is the word valid?)
 - `pass`
 - `swap_tiles` — 1 tile index to exchange
 - `define` — word + board coords; triggers MW lookup (popup "View definition" button)
@@ -253,10 +237,10 @@ The DO sends the full game state to every connected client. Each player's rack d
 - `challenge_update` — `{ playerId, wordIndex }` — broadcast in real time when any player challenges a word
 - `challenge_result` — `{ challenged: [{word, by}] }` — which words were challenged and by whom; sent when window closes
 - `move_applied` — move committed, includes updated board + scores
-- `move_rejected` — a non-submitter challenged a word; player must replay their turn
+- `move_rejected` — the review vote rejected the move; player replays their turn
 - `definition_result` — MW response for a `define` request
 - `error`
-- `game_over`
+- `game_over` — `{ reason }` — game ended/canceled (e.g. host left)
 
 On reconnect, DO sends the full current `state` snapshot. If a post-submit popup is in progress, the snapshot includes the pending move, the current per-player accept/challenge state, and the rejoining player's remaining countdown so they can render the popup correctly.
 
@@ -279,8 +263,10 @@ On reconnect, DO sends the full current `state` snapshot. If a post-submit popup
 | Rack size | 7 |
 | Players | 2–4 |
 | Validation mode | `"challenge"` + `challengePenalty: false` |
-| Challenge resolution | Human consensus (no dictionary arbiter); any 1 challenge rejects the move |
-| Challenge window | 30s per-player auto-accept; any interaction cancels that player's countdown |
+| Challenge resolution | Human consensus (no dictionary arbiter). Challenge → review/vote; move plays only if every non-submitter allows it; any "not valid" vote rejects it |
+| Challenge window | 30s auto-accept in the open stage; a challenge pauses the timer and opens the vote |
+| Join | A non-empty name is required (no anonymous players); enforced client + server |
+| Host leaves | The game is canceled for everyone (`game_over`, end screen) |
 | Lexicon | SCOWL size 50–70 buckets |
 | Q tile | Combined `Qu` |
 | Tile distribution | Confirmed from physical edition (see table above) |

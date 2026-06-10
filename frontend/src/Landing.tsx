@@ -132,7 +132,14 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
         <span className="brand">
           <span className="mini">U</span> Upwords
         </span>
-        <button className="icon-btn" onClick={onLeave} aria-label="Leave">
+        <button
+          className="icon-btn"
+          onClick={() => {
+            room.leave();
+            onLeave();
+          }}
+          aria-label="Leave"
+        >
           <Icon name="leave" size={20} />
         </button>
       </div>

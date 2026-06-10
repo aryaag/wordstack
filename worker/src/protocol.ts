@@ -25,15 +25,20 @@ export interface TurnRecord {
   total: number;
 }
 
+export type PendingStage = "open" | "review";
+
 export interface PendingMove {
   submitterId: string;
   placed: PlacedTile[];
   words: PendingWord[];
   totalPoints: number;
   bingoBonus: number;
-  deadline: number; // epoch ms
-  stances: Record<string, "pending" | "accepted">; // per non-submitter playerId
-  challenges: Record<string, number[]>; // playerId → challenged word indices
+  stage: PendingStage;
+  deadline: number | null; // open: 30s auto-accept; review: backstop (timer paused in UI)
+  stances: Record<string, "pending" | "accepted">; // open stage: per non-submitter
+  challenges: Record<string, number[]>; // who challenged which word(s)
+  votes: Record<string, "allow" | "reject">; // review stage: per non-submitter ("is the word valid?")
+  challengerId: string | null; // first challenger (triggered review)
 }
 
 /** Authoritative state held in DO storage. `bag` and `seed` never leave the server. */
@@ -51,6 +56,8 @@ export interface GameState {
   history: TurnRecord[];
   /** Per-cell stack of layer metadata, aligned with `board[r][c]` (cellKey "r,c"). */
   boardMeta: Record<string, LayerMeta[]>;
+  /** Set when the game ends/cancels (e.g. host left); shown on the end screen. */
+  endReason: string | null;
 }
 
 export interface LayerMeta {
@@ -67,6 +74,7 @@ export type ClientMessage =
   | { type: "submit_move"; placed: PlacedTile[] }
   | { type: "challenge_word"; wordIndex: number }
   | { type: "acknowledge_move" }
+  | { type: "vote_move"; vote: "allow" | "reject" }
   | { type: "pass" }
   | { type: "swap_tiles"; index: number }
   | { type: "leave" };
@@ -78,4 +86,5 @@ export type ServerMessage =
   | { type: "challenge_result"; challenged: { word: string; by: string[] }[] }
   | { type: "move_applied"; by: string; points: number; words: PendingWord[] }
   | { type: "move_rejected"; reason: string }
+  | { type: "game_over"; reason: string }
   | { type: "error"; message: string };

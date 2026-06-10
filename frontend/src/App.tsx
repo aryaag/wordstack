@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
 import { Landing, Lobby, NamePrompt } from "./Landing";
 import { Game } from "./Game";
+import { EndScreen } from "./overlays";
 import "./App.css";
 
 const roomFromUrl = () => new URLSearchParams(location.search).get("room");
@@ -77,6 +78,8 @@ function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave
         </div>
       ) : state.phase === "lobby" ? (
         <Lobby room={room} onLeave={onLeave} />
+      ) : state.phase === "gameover" ? (
+        <EndScreen state={state} onLeave={onLeave} />
       ) : (
         <Game room={room} onLeave={onLeave} />
       )}
