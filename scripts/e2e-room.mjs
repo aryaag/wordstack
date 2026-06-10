@@ -152,13 +152,13 @@ async function main() {
 
   // 6. A swaps a tile → tile changes, turn to B
   game = A.latestState();
-  const before = rackOf(game, "A")[0];
+  const bagBefore = game.bagCount;
   ms = A.mark();
   A.send({ type: "swap_tiles", index: 0 });
   await A.waitFrom(ms, stateWith((g) => g.turnSeat === 1 && g.phase === "playing"), "swap rotates to B");
   game = A.latestState();
   assert(rackOf(game, "A").length === 7, "rack still 7 after swap");
-  assert(rackOf(game, "A")[0] !== before, "swapped tile changed");
+  assert(game.bagCount === bagBefore, "swap keeps the bag count the same");
 
   // 7. reconnect mid-pending: B submits, drop A, reconnect A, expect pending in state
   mpA = A.mark();

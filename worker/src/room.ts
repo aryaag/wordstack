@@ -106,6 +106,8 @@ export class Room {
         return this.onStart(ws);
       case "submit_move":
         return this.onSubmit(ws, msg.placed);
+      case "place_draft":
+        return this.onDraft(ws, msg.placed);
       case "challenge_word":
         return this.onChallenge(ws, msg.wordIndex);
       case "acknowledge_move":
@@ -209,6 +211,7 @@ export class Room {
       votes: {},
       challengerId: null,
     };
+    s.draft = null;
     s.phase = "pending";
     await this.ctx.storage.setAlarm(deadline);
     await this.persist();
@@ -221,6 +224,17 @@ export class Room {
     });
     this.broadcastState();
     await this.maybeCloseOpen();
+  }
+
+  /** Live placement: rebroadcast the current player's in-progress tiles (not persisted). */
+  private async onDraft(ws: WebSocket, placed: PlacedTile[]): Promise<void> {
+    const s = this.state;
+    if (!s || s.phase !== "playing") return;
+    const pid = this.playerIdOf(ws);
+    if (!pid || s.players[s.turnSeat]?.id !== pid) return; // only the current player drafts
+    if (!Array.isArray(placed)) return;
+    s.draft = placed.length ? { by: pid, placed } : null;
+    this.broadcastState(); // transient: deliberately not persisted (per-keystroke)
   }
 
   /** Open stage only: a challenge pauses the timer and moves the table into review/voting. */
@@ -293,6 +307,7 @@ export class Room {
     const player = this.requireCurrentPlayer(ws, s);
     if (!player) return;
     s.consecutivePasses++;
+    s.draft = null;
     this.rotateTurn(s);
     await this.persistAndBroadcast();
   }
@@ -311,6 +326,7 @@ export class Room {
     player.rack[index] = drawn[0];
     s.bag = [removed, ...bag]; // returned tile goes to the bottom of the bag
     s.consecutivePasses = 0;
+    s.draft = null;
     this.rotateTurn(s);
     await this.persistAndBroadcast();
   }
@@ -375,6 +391,7 @@ export class Room {
     this.broadcast({ type: "challenge_result", challenged });
     this.broadcast({ type: "move_rejected", reason: "the table did not accept the word — replay your turn" });
     s.pending = null;
+    s.draft = null;
     s.phase = "playing"; // board/rack untouched; same player's turn (replay)
     await this.persistAndBroadcast();
   }
@@ -409,6 +426,7 @@ export class Room {
     });
     s.pending = null;
     s.phase = "playing";
+    s.draft = null;
     this.rotateTurn(s);
     this.broadcast({
       type: "move_applied",
@@ -520,6 +538,7 @@ function freshLobby(code: string): GameState {
     history: [],
     boardMeta: {},
     endReason: null,
+    draft: null,
   };
 }
 

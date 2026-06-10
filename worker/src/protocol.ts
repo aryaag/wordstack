@@ -58,11 +58,19 @@ export interface GameState {
   boardMeta: Record<string, LayerMeta[]>;
   /** Set when the game ends/cancels (e.g. host left); shown on the end screen. */
   endReason: string | null;
+  /** Live, uncommitted tiles the current player is placing (not persisted). */
+  draft: DraftPlacement | null;
 }
 
 export interface LayerMeta {
   by: string; // playerId who placed this layer
   word: string; // the (longest) word this tile was part of when played
+}
+
+/** The current player's in-progress (uncommitted) tiles, shown live to everyone. */
+export interface DraftPlacement {
+  by: string;
+  placed: PlacedTile[];
 }
 
 /** What clients receive: full state minus the secret bag order/seed (only the count). */
@@ -72,6 +80,7 @@ export type ClientMessage =
   | { type: "join"; playerId: string; name: string }
   | { type: "start_game" }
   | { type: "submit_move"; placed: PlacedTile[] }
+  | { type: "place_draft"; placed: PlacedTile[] }
   | { type: "challenge_word"; wordIndex: number }
   | { type: "acknowledge_move" }
   | { type: "vote_move"; vote: "allow" | "reject" }

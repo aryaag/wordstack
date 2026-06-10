@@ -14,6 +14,30 @@ export interface InspectLayer {
 
 const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
 
+// ── Compact player strip (avatar circles + score + turn ring), always on top ──
+export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
+  const current = state.players[state.turnSeat];
+  return (
+    <div className="pstrip">
+      {state.players.map((p) => {
+        const col = colorOf(p);
+        const isCurrent = p.id === current?.id && state.phase !== "gameover";
+        return (
+          <div key={p.id} className={`pcell${isCurrent ? " active" : ""}`} title={p.name}>
+            <span className="av" style={{ background: col.bg, color: col.fg }}>
+              {initials(p.name)}
+            </span>
+            <span className="pscore-mini">
+              {p.score}
+              {p.id === me ? " · you" : ""}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Players scoreboard + move history (side panel on wide; drawer on mobile) ──
 export function GameInfo({ state, me }: { state: PublicState; me: string }) {
   const current = state.players[state.turnSeat];

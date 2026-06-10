@@ -8,7 +8,7 @@ import {
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
 import { Board, cellKey, type Overlay } from "./board";
-import { ConfirmLeave, GameInfo, StackInspector, TurnReview, type InspectLayer } from "./overlays";
+import { ConfirmLeave, GameInfo, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { AVATAR_COLORS, displayLetter, Icon, initials, Tile } from "./lib";
 
 interface Staged {
@@ -56,6 +56,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     for (const p of state.pending.placed) overlay.set(cellKey(p.row, p.col), p.letter);
   } else if (isMyTurn) {
     for (const [k, v] of staged) overlay.set(k, v.letter);
+  } else if (phase === "playing" && state.draft && state.draft.by === current?.id) {
+    // Watch the current player's tiles appear live, before they submit.
+    for (const p of state.draft.placed) overlay.set(cellKey(p.row, p.col), p.letter);
   }
 
   const openInspect = (r: number, c: number) => {
@@ -65,18 +68,29 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setInspect(stack.map((letter, idx) => ({ letter, by: meta[idx]?.by, word: meta[idx]?.word })));
   };
 
+  const mapToPlaced = (m: Map<string, Staged>): PlacedTile[] =>
+    [...m.entries()].map(([key, v]) => {
+      const [r, c] = key.split(",").map(Number);
+      return { row: r, col: c, letter: v.letter };
+    });
+  // Update staged tiles AND broadcast them live so everyone sees the placement.
+  const stageTiles = (m: Map<string, Staged>) => {
+    setStaged(m);
+    room.placeDraft(mapToPlaced(m));
+  };
+
   const onCell = (r: number, c: number) => {
     if (!isMyTurn) return openInspect(r, c);
     const key = cellKey(r, c);
     if (staged.has(key)) {
       const m = new Map(staged);
       m.delete(key);
-      setStaged(m);
+      stageTiles(m);
       setSelected(null);
     } else if (selected !== null) {
       const m = new Map(staged);
       m.set(key, { letter: myRack[selected], rackIndex: selected });
-      setStaged(m);
+      stageTiles(m);
       setSelected(null);
     } else {
       openInspect(r, c);
@@ -88,10 +102,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(selected === i ? null : i);
   };
 
-  const placed: PlacedTile[] = [...staged.entries()].map(([key, v]) => {
-    const [r, c] = key.split(",").map(Number);
-    return { row: r, col: c, letter: v.letter };
-  });
+  const placed: PlacedTile[] = mapToPlaced(staged);
   const validation = staged.size ? validatePlacement(state.board, placed, myRack, DEFAULT_CONFIG) : null;
   const valid = validation?.ok ?? false;
   let preview: { text: string; bad: boolean } | null = null;
@@ -115,7 +126,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(null);
   };
   const recall = () => {
-    setStaged(new Map());
+    stageTiles(new Map());
     setSelected(null);
   };
   const shuffle = () => setOrder((o) => [...o].sort(() => Math.random() - 0.5));
@@ -143,6 +154,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           </button>
         </span>
       </div>
+
+      <PlayerStrip state={state} me={me} />
 
       <div className="game-body">
         <div className="game-main">

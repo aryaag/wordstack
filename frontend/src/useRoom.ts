@@ -35,6 +35,7 @@ export interface RoomConn {
   me: string; // this client's playerId
   start: () => void;
   submit: (placed: PlacedTile[]) => void;
+  placeDraft: (placed: PlacedTile[]) => void;
   challenge: (wordIndex: number) => void;
   acknowledge: () => void;
   vote: (vote: "allow" | "reject") => void;
@@ -126,6 +127,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
     me,
     start: () => action({ type: "start_game" }),
     submit: (placed) => action({ type: "submit_move", placed }),
+    placeDraft: (placed) => action({ type: "place_draft", placed }),
     challenge: (wordIndex) => action({ type: "challenge_word", wordIndex }),
     acknowledge: () => action({ type: "acknowledge_move" }),
     vote: (vote) => action({ type: "vote_move", vote }),
