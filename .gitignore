@@ -7,3 +7,6 @@ frontend/dist/
 
 # local planning docs — not tracked
 .claude/plans/
+
+# generated lexicon seed (regenerate via `npm run build:wordlist`)
+scripts/generated/

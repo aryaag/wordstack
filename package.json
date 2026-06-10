@@ -9,7 +9,12 @@
     "build": "vite build --config frontend/vite.config.ts",
     "deploy": "npm run build && wrangler deploy -c worker/wrangler.toml",
     "test": "vitest",
-    "typecheck": "tsc -p worker/tsconfig.json && tsc -p frontend/tsconfig.json"
+    "typecheck": "tsc -p worker/tsconfig.json && tsc -p frontend/tsconfig.json",
+    "build:wordlist": "node scripts/build-wordlist.ts",
+    "db:migrate:local": "wrangler d1 execute upwords-db --local -c worker/wrangler.toml --file migrations/0001_words.sql",
+    "db:migrate": "wrangler d1 execute upwords-db --remote -c worker/wrangler.toml --file migrations/0001_words.sql",
+    "db:seed:local": "wrangler d1 execute upwords-db --local -c worker/wrangler.toml --file scripts/generated/seed-words.sql",
+    "db:seed": "wrangler d1 execute upwords-db --remote -c worker/wrangler.toml --file scripts/generated/seed-words.sql"
   },
   "dependencies": {
     "react": "^19.0.0",
