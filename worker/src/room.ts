@@ -3,6 +3,7 @@ import {
   DEFAULT_CONFIG,
   detectTrivialSuffixes,
   draw,
+  endgamePenalty,
   extractWords,
   makeEmptyBoard,
   newShuffledBag,
@@ -27,6 +28,9 @@ const CONFIG = DEFAULT_CONFIG;
 const WINDOW_MS = 30_000; // open stage: auto-accept countdown
 const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
 const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
+const SKIP_MS = 120_000; // auto-skip a disconnected current player's turn after this
+const CLEANUP_MS = 24 * 60 * 60_000; // delete a finished/abandoned room's storage after this
+const CLEANUP_RECHECK_MS = 60 * 60_000; // if someone's still connected at cleanup time, recheck in 1h
 
 type Attachment = { playerId: string };
 
@@ -91,22 +95,44 @@ export class Room {
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     await this.serialize(async () => {
+      const s = this.state;
       const pid = this.playerIdOf(ws);
-      const player = this.state?.players.find((p) => p.id === pid);
-      if (player) {
+      const player = s?.players.find((p) => p.id === pid);
+      if (s && player) {
         player.connected = false;
+        await this.armTurnTimer(s); // if the current player just dropped, start the auto-skip clock
         await this.persistAndBroadcast();
       }
     });
   }
 
-  /** DO Alarm = the 30s challenge-window backstop. */
+  /** The single DO Alarm serves three phase-exclusive purposes:
+   *  - pending  → challenge-window backstop (auto-accept / tally)
+   *  - playing  → auto-skip a disconnected current player's turn
+   *  - gameover → delete the room's storage once everyone has left */
   async alarm(): Promise<void> {
     await this.serialize(async () => {
-      const p = this.state?.pending;
-      if (!p) return;
-      if (p.stage === "open") await this.commitMove(); // no challenge → auto-accept
-      else await this.finishReview(); // backstop: unvoted counts as allow
+      const s = this.state;
+      if (!s) return;
+      if (s.pending) {
+        if (s.pending.stage === "open") await this.commitMove(); // no challenge → auto-accept
+        else await this.finishReview(); // backstop: unvoted counts as allow
+        return;
+      }
+      if (s.phase === "playing") {
+        const cur = s.players[s.turnSeat];
+        if (cur && !cur.connected) await this.doPass(s); // away player → skip their turn
+        return;
+      }
+      if (s.phase === "gameover") {
+        if (s.players.some((p) => p.connected)) {
+          await this.ctx.storage.setAlarm(Date.now() + CLEANUP_RECHECK_MS); // someone's reviewing — wait
+        } else {
+          await this.ctx.storage.deleteAll();
+          this.state = null;
+          this.defCache.clear();
+        }
+      }
     });
   }
 
@@ -162,6 +188,7 @@ export class Room {
       if (s.players.length === 1) s.hostId = playerId;
     }
     ws.serializeAttachment({ playerId } satisfies Attachment);
+    await this.armTurnTimer(s); // a returning current player cancels their pending auto-skip
     await this.persistAndBroadcast();
   }
 
@@ -183,8 +210,9 @@ export class Room {
     }
     s.bag = bag;
     s.phase = "playing";
-    s.turnSeat = 0;
+    s.turnSeat = Math.floor(Math.random() * s.players.length); // randomize who goes first
     s.consecutivePasses = 0;
+    await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
@@ -317,11 +345,21 @@ export class Room {
   private async onPass(ws: WebSocket): Promise<void> {
     const s = this.requireState(ws);
     if (!s) return;
-    const player = this.requireCurrentPlayer(ws, s);
-    if (!player) return;
+    if (!this.requireCurrentPlayer(ws, s)) return;
+    await this.doPass(s);
+  }
+
+  /** Advance the turn with a pass — used by an explicit `pass` and by the
+   *  disconnect auto-skip. Ends the game once every player has passed in
+   *  succession (one full round). */
+  private async doPass(s: GameState): Promise<void> {
     s.consecutivePasses++;
     s.draft = null;
     this.rotateTurn(s);
+    if (s.consecutivePasses >= s.players.length) {
+      return this.finishGame("Everyone passed — the game is over.", true);
+    }
+    await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
@@ -341,6 +379,7 @@ export class Room {
     s.consecutivePasses = 0;
     s.draft = null;
     this.rotateTurn(s);
+    await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
@@ -348,18 +387,27 @@ export class Room {
     const s = this.state;
     const pid = this.playerIdOf(ws);
     if (s && pid && pid === s.hostId && s.phase !== "gameover") {
-      return this.cancelGame("The host left — the game was canceled.");
+      // Host leaving cancels the game — no end-of-game tile penalty (it didn't finish).
+      return this.finishGame("The host left — the game was canceled.", false);
     }
     await this.webSocketClose(ws);
   }
 
-  private async cancelGame(reason: string): Promise<void> {
+  /** End the game: optionally apply the −5/leftover-tile penalty, move to
+   *  `gameover`, broadcast `game_over`, and arm the 24h storage-cleanup alarm.
+   *  Shared by natural endings (penalty) and host-cancel (no penalty). */
+  private async finishGame(reason: string, applyPenalty: boolean): Promise<void> {
     const s = this.state;
     if (!s) return;
-    await this.ctx.storage.deleteAlarm();
+    if (applyPenalty) {
+      for (const p of s.players) p.score -= endgamePenalty(p.rack.length, CONFIG);
+    }
     s.phase = "gameover";
+    s.scored = applyPenalty;
     s.pending = null;
+    s.draft = null;
     s.endReason = reason;
+    await this.ctx.storage.setAlarm(Date.now() + CLEANUP_MS); // self-destruct once everyone's gone
     this.broadcast({ type: "game_over", reason });
     await this.persistAndBroadcast();
   }
@@ -406,6 +454,7 @@ export class Room {
     s.pending = null;
     s.draft = null;
     s.phase = "playing"; // board/rack untouched; same player's turn (replay)
+    await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
@@ -447,6 +496,11 @@ export class Room {
       points: pending.totalPoints,
       words: pending.words,
     });
+    // Endgame: a player goes out (empties their rack) with an empty bag.
+    if (submitter.rack.length === 0 && s.bag.length === 0) {
+      return this.finishGame(`${submitter.name} used all their tiles — the game is over.`, true);
+    }
+    await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
@@ -476,6 +530,16 @@ export class Room {
 
   private rotateTurn(s: GameState): void {
     s.turnSeat = (s.turnSeat + 1) % s.players.length;
+  }
+
+  /** Arm (or clear) the disconnect auto-skip alarm for the current turn. Only
+   *  active during `playing`; the challenge window and cleanup own the alarm in
+   *  their own phases. */
+  private async armTurnTimer(s: GameState): Promise<void> {
+    if (s.phase !== "playing") return;
+    const cur = s.players[s.turnSeat];
+    if (cur && !cur.connected) await this.ctx.storage.setAlarm(Date.now() + SKIP_MS);
+    else await this.ctx.storage.deleteAlarm();
   }
 
   private requireState(ws: WebSocket): GameState | null {
@@ -569,6 +633,7 @@ function freshLobby(code: string): GameState {
     history: [],
     boardMeta: {},
     endReason: null,
+    scored: false,
     draft: null,
   };
 }

@@ -45,3 +45,12 @@ export function scoreTurn(
 
   return { total, perWord, bingoBonus };
 }
+
+/**
+ * Endgame penalty for a single player: `endgameTilePenaltyPoints` per leftover
+ * tile on their rack when the game ends (0 if `endgameTilePenalty` is off, or if
+ * the player went out with an empty rack). Subtracted from their final score.
+ */
+export function endgamePenalty(leftoverTiles: number, config: Config): number {
+  return config.endgameTilePenalty ? leftoverTiles * config.endgameTilePenaltyPoints : 0;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { extractWords } from "../../worker/src/engine";
+import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
 import { AVATAR_COLORS, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
@@ -375,22 +375,34 @@ function DefineModal({ word, room, onClose }: { word: string; room?: string; onC
 // ── End screen (game over / canceled) ───────────────────────────────────────
 export function EndScreen({ state, onLeave }: { state: PublicState; onLeave: () => void }) {
   const ranked = [...state.players].sort((a, b) => b.score - a.score);
+  const topScore = ranked[0]?.score;
+  const penaltyPts = DEFAULT_CONFIG.endgameTilePenaltyPoints;
   return (
     <div className="panel" style={{ textAlign: "center" }}>
       <h2>Game over</h2>
       <p className="muted">{state.endReason ?? "The game has ended."}</p>
       <ul className="players-list" style={{ textAlign: "left" }}>
-        {ranked.map((p, i) => (
-          <li key={p.id}>
-            <b>
-              {i === 0 ? "🏆 " : ""}
-              {p.name}
-            </b>
-            <span className="muted" style={{ marginLeft: "auto" }}>
-              {p.score} pts
-            </span>
-          </li>
-        ))}
+        {ranked.map((p) => {
+          // Show the leftover-tile penalty only when it was actually applied.
+          const leftover = p.rack.length;
+          const penalized = state.scored && leftover > 0;
+          return (
+            <li key={p.id}>
+              <b>
+                {p.score === topScore ? "🏆 " : ""}
+                {p.name}
+              </b>
+              <span style={{ marginLeft: "auto", textAlign: "right" }}>
+                <span className="pscore-end">{p.score} pts</span>
+                {penalized && (
+                  <span className="muted penalty-note">
+                    −{leftover * penaltyPts} · {leftover} tile{leftover === 1 ? "" : "s"} left
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ul>
       <button className="cta primary" onClick={onLeave}>
         Back to home

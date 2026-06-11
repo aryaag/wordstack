@@ -16,7 +16,7 @@ export {
 } from "./board";
 export { extractWords } from "./words";
 export { validatePlacement } from "./placement";
-export { scoreTurn } from "./scoring";
+export { endgamePenalty, scoreTurn } from "./scoring";
 export type { TurnScore, WordScore } from "./scoring";
 export { detectTrivialSuffixes } from "./suffixes";
 export type { IsValidWord, SuffixRule, TrivialityResult, WordTriviality } from "./suffixes";

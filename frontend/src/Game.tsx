@@ -56,6 +56,23 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     return () => clearTimeout(t);
   }, [room.notice]);
 
+  // Announce the (randomly chosen) starting player once, when the game begins.
+  const announcedStart = useRef(false);
+  useEffect(() => {
+    if (!state) return;
+    if (state.phase === "lobby") {
+      announcedStart.current = false; // reset so a rematch re-announces
+      return;
+    }
+    if (state.phase !== "playing" || state.history.length > 0 || announcedStart.current) return;
+    announcedStart.current = true;
+    const starter = state.players[state.turnSeat];
+    if (!starter) return;
+    setToast(`🎲 ${starter.id === me ? "You go" : `${starter.name} goes`} first`);
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [state, me]);
+
   if (!state || !myPlayer) return null;
 
   const phase = state.phase;
@@ -254,6 +271,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                 {initials(current?.name ?? "?")}
               </span>
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
+              {current && !current.connected && phase === "playing" && (
+                <span className="away-hint"> · reconnecting, auto-skip soon</span>
+              )}
             </span>
             <span>{state.bagCount} tiles left</span>
           </div>

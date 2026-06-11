@@ -555,6 +555,19 @@ svg {
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
 }
+.pscore-end {
+  display: block;
+  font-weight: 500;
+}
+.penalty-note {
+  display: block;
+  font-size: 11px;
+  color: var(--warn-fg);
+}
+.away-hint {
+  color: var(--warn-fg);
+  font-size: 12px;
+}
 
 /* ── Modal / turn review ──────────────────────────────────────────────── */
 .scrim {

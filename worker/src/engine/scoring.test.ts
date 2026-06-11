@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "./config";
-import { scoreTurn } from "./scoring";
+import { endgamePenalty, scoreTurn } from "./scoring";
 import type { FormedWord, PlacedTile, Tile, WordCell } from "./types";
 
 const cfg = DEFAULT_CONFIG;
@@ -69,5 +69,24 @@ describe("scoreTurn", () => {
     const w1 = flatWord(["c", "a", "t"]); // 6
     const w2 = flatWord(["a", "t"]); // 4, shares tiles conceptually
     expect(scoreTurn([w1, w2], placed(3), cfg).total).toBe(10);
+  });
+});
+
+describe("endgamePenalty", () => {
+  it("deducts 5 per leftover tile when the penalty is on", () => {
+    expect(endgamePenalty(3, cfg)).toBe(15);
+    expect(endgamePenalty(7, cfg)).toBe(35);
+  });
+
+  it("is zero when the player went out (empty rack)", () => {
+    expect(endgamePenalty(0, cfg)).toBe(0);
+  });
+
+  it("is zero when the penalty is disabled", () => {
+    expect(endgamePenalty(4, { ...cfg, endgameTilePenalty: false })).toBe(0);
+  });
+
+  it("respects a custom per-tile penalty", () => {
+    expect(endgamePenalty(2, { ...cfg, endgameTilePenaltyPoints: 10 })).toBe(20);
   });
 });

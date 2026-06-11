@@ -58,6 +58,9 @@ export interface GameState {
   boardMeta: Record<string, LayerMeta[]>;
   /** Set when the game ends/cancels (e.g. host left); shown on the end screen. */
   endReason: string | null;
+  /** True once the game ended naturally and end-of-game tile penalties were
+   *  applied to scores (false for a host-cancel). Drives the end-screen breakdown. */
+  scored: boolean;
   /** Live, uncommitted tiles the current player is placing (not persisted). */
   draft: DraftPlacement | null;
 }
