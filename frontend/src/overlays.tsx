@@ -24,13 +24,17 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
         const col = colorOf(p);
         const isCurrent = p.id === current?.id && state.phase !== "gameover";
         return (
-          <div key={p.id} className={`pcell${isCurrent ? " active" : ""}`} title={p.name}>
+          <div
+            key={p.id}
+            className={`pcell${isCurrent ? " active" : ""}${p.left ? " gone" : ""}`}
+            title={p.left ? `${p.name} (left)` : p.name}
+          >
             <span className="av" style={{ background: col.bg, color: col.fg }}>
               {initials(p.name)}
             </span>
             <span className="pscore-mini">
               {p.score}
-              {p.id === me ? " · you" : ""}
+              {p.id === me ? " · you" : p.left ? " · left" : ""}
             </span>
           </div>
         );
@@ -53,7 +57,7 @@ export function GameInfo({ state, me }: { state: PublicState; me: string }) {
           const col = colorOf(p);
           const isCurrent = p.id === current?.id && state.phase !== "gameover";
           return (
-            <div key={p.id} className={`prow${p.id === me ? " you" : ""}`}>
+            <div key={p.id} className={`prow${p.id === me ? " you" : ""}${p.left ? " gone" : ""}`}>
               <span className="av" style={{ background: col.bg, color: col.fg }}>
                 {initials(p.name)}
               </span>
@@ -61,7 +65,7 @@ export function GameInfo({ state, me }: { state: PublicState; me: string }) {
                 {p.name}
                 {p.id === me ? " · you" : ""}
                 {isCurrent ? " · turn" : ""}
-                {p.connected ? "" : " · away"}
+                {p.left ? " · left" : p.connected ? "" : " · away"}
               </span>
               <span className="ps">{p.score}</span>
             </div>

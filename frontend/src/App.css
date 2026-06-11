@@ -568,6 +568,11 @@ svg {
   color: var(--warn-fg);
   font-size: 12px;
 }
+/* A player who left the game for good — dimmed in the strip and panel. */
+.pcell.gone,
+.prow.gone {
+  opacity: 0.42;
+}
 
 /* ── Reconnecting veil (own socket dropped) ───────────────────────────────── */
 .reconnect-scrim {

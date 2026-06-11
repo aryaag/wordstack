@@ -174,6 +174,7 @@ export class Room {
     const existing = s.players.find((p) => p.id === playerId);
     if (existing) {
       existing.connected = true; // reconnect to the same seat + rack
+      existing.left = false; // a returning player un-leaves
     } else {
       const cleanName = (name ?? "").trim().slice(0, 24);
       if (!cleanName) return this.send(ws, { type: "error", message: "please enter a name to join" });
@@ -310,7 +311,7 @@ export class Room {
     // challenge resolves the move immediately (the lone "not valid" stands) —
     // skip showing the voting UI. With 3–4 players, broadcast the review state
     // so the others can vote.
-    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
     if (others.every((p) => pending.votes[p.id] !== undefined)) {
       await this.finishReview();
     } else {
@@ -365,7 +366,8 @@ export class Room {
     s.consecutivePasses++;
     s.draft = null;
     this.rotateTurn(s);
-    if (s.consecutivePasses >= s.players.length) {
+    const active = s.players.filter((p) => !p.left).length;
+    if (s.consecutivePasses >= active) {
       return this.finishGame("Everyone passed — the game is over.", true);
     }
     await this.armTurnTimer(s);
@@ -392,14 +394,44 @@ export class Room {
     await this.persistAndBroadcast();
   }
 
+  /** An explicit, intentional departure (vs. a transient disconnect → `webSocketClose`). */
   private async onLeave(ws: WebSocket): Promise<void> {
     const s = this.state;
     const pid = this.playerIdOf(ws);
-    if (s && pid && pid === s.hostId && s.phase !== "gameover") {
-      // Host leaving cancels the game — no end-of-game tile penalty (it didn't finish).
+    if (!s || !pid) return;
+    const player = s.players.find((p) => p.id === pid);
+    if (!player) return;
+
+    // Host leaving always cancels the game (no end-of-game penalty — it didn't finish).
+    if (pid === s.hostId && s.phase !== "gameover") {
       return this.finishGame("The host left — the game was canceled.", false);
     }
-    await this.webSocketClose(ws);
+    // Before the game starts, just drop them from the lobby roster.
+    if (s.phase === "lobby") {
+      s.players = s.players.filter((p) => p.id !== pid);
+      return this.persistAndBroadcast();
+    }
+    if (s.phase === "gameover") {
+      player.connected = false;
+      return this.persistAndBroadcast();
+    }
+
+    // Mid-game: the player is gone for good.
+    player.left = true;
+    player.connected = false;
+    if (s.players.filter((p) => !p.left).length < 2) {
+      return this.finishGame(`${player.name} left — not enough players to continue.`, false);
+    }
+    // 3–4 player game continues without them.
+    if (s.pending) {
+      // They no longer count toward accept/vote resolution — re-check it.
+      await this.persist();
+      this.broadcastState();
+      return s.pending.stage === "open" ? this.maybeCloseOpen() : this.checkReview();
+    }
+    if (s.players[s.turnSeat]?.id === pid) this.rotateTurn(s); // skip past them if it was their turn
+    await this.armTurnTimer(s);
+    await this.persistAndBroadcast();
   }
 
   /** End the game: optionally apply the −5/leftover-tile penalty, move to
@@ -427,7 +459,7 @@ export class Room {
     const s = this.state;
     if (!s || s.phase !== "pending" || s.pending?.stage !== "open") return;
     const pending = s.pending;
-    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
     if (others.every((p) => pending.stances[p.id] === "accepted")) await this.commitMove();
   }
 
@@ -436,7 +468,7 @@ export class Room {
     const s = this.state;
     if (!s || s.phase !== "pending" || s.pending?.stage !== "review") return;
     const pending = s.pending;
-    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
     if (others.every((p) => pending.votes[p.id] !== undefined)) await this.finishReview();
   }
 
@@ -444,7 +476,7 @@ export class Room {
   private async finishReview(): Promise<void> {
     const s = this.state!;
     const pending = s.pending!;
-    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
     if (others.some((p) => pending.votes[p.id] === "reject")) await this.rejectMove();
     else await this.commitMove();
   }
@@ -537,8 +569,16 @@ export class Room {
     return result;
   }
 
+  /** Advance to the next player who hasn't left the game. */
   private rotateTurn(s: GameState): void {
-    s.turnSeat = (s.turnSeat + 1) % s.players.length;
+    const n = s.players.length;
+    for (let i = 1; i <= n; i++) {
+      const seat = (s.turnSeat + i) % n;
+      if (!s.players[seat].left) {
+        s.turnSeat = seat;
+        return;
+      }
+    }
   }
 
   /** Arm (or clear) the disconnect auto-skip alarm for the current turn. Only

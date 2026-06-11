@@ -10,6 +10,10 @@ export interface PlayerState {
   rack: Tile[];
   score: number;
   connected: boolean;
+  /** True if the player explicitly left for good (vs. a transient disconnect,
+   *  which only flips `connected`). Left players are skipped and don't block
+   *  challenge resolution; cleared if they later rejoin. */
+  left?: boolean;
 }
 
 export interface PendingWord {
