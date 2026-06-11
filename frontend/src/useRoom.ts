@@ -28,9 +28,11 @@ export async function createRoom(): Promise<string> {
   return (await res.json()).code as string;
 }
 
-/** GET /define → live Merriam-Webster lookup (Worker proxies + parses; never stored). */
-export async function fetchDefinition(word: string): Promise<DefineResult> {
-  const res = await fetch(`/define?word=${encodeURIComponent(word)}`);
+/** GET /define → MW lookup. Passing the room code routes through that room's DO,
+ *  which serves a short-TTL in-memory cache shared by everyone in the room. */
+export async function fetchDefinition(word: string, room?: string): Promise<DefineResult> {
+  const q = `?word=${encodeURIComponent(word)}${room ? `&room=${encodeURIComponent(room)}` : ""}`;
+  const res = await fetch(`/define${q}`);
   return (await res.json()) as DefineResult;
 }
 

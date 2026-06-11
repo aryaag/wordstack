@@ -149,7 +149,9 @@ export function TurnReview({
     return () => clearInterval(t);
   }, []);
   const [defineWord, setDefineWord] = useState<string | null>(null);
-  const defineModal = defineWord && <DefineModal word={defineWord} onClose={() => setDefineWord(null)} />;
+  const defineModal = defineWord && (
+    <DefineModal word={defineWord} room={state.code} onClose={() => setDefineWord(null)} />
+  );
 
   // ── Review / voting stage ──────────────────────────────────────────────
   if (pending.stage === "review") {
@@ -305,7 +307,7 @@ export function TurnReview({
 }
 
 // ── Definition modal (live Merriam-Webster lookup; informational only) ───────
-function DefineModal({ word, onClose }: { word: string; onClose: () => void }) {
+function DefineModal({ word, room, onClose }: { word: string; room?: string; onClose: () => void }) {
   const [res, setRes] = useState<DefineResult | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -313,14 +315,14 @@ function DefineModal({ word, onClose }: { word: string; onClose: () => void }) {
     let alive = true;
     setLoading(true);
     setRes(null);
-    fetchDefinition(word)
+    fetchDefinition(word, room)
       .then((r) => alive && setRes(r))
       .catch(() => alive && setRes({ word, error: "Could not reach the dictionary." }))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [word]);
+  }, [word, room]);
 
   return (
     <div className="scrim" onClick={onClose}>

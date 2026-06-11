@@ -20,10 +20,13 @@ import type {
   ServerMessage,
 } from "./protocol";
 import type { Env } from "./index";
+import { lookupDefinition } from "./define";
+import type { DefineResult } from "./protocol";
 
 const CONFIG = DEFAULT_CONFIG;
 const WINDOW_MS = 30_000; // open stage: auto-accept countdown
 const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
+const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
 
 type Attachment = { playerId: string };
 
@@ -33,6 +36,10 @@ export class Room {
   private env: Env;
   private state: GameState | null = null;
   private chain: Promise<unknown> = Promise.resolve();
+  // Transient, in-memory only: dedupes MW lookups for words defined this turn by
+  // multiple players. Never persisted (not DO storage, D1, KV, or a log) and
+  // evicted after DEFINE_TTL_MS; lost entirely on hibernation. See define.ts.
+  private defCache = new Map<string, { result: DefineResult; at: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     this.ctx = ctx;
@@ -53,6 +60,12 @@ export class Room {
         await this.persist();
       }
       return Response.json({ ok: true });
+    }
+
+    // Cached MW definition lookup (shared by everyone in this room). The Worker's
+    // /define route forwards here with an already-validated word.
+    if (url.pathname.endsWith("/define")) {
+      return Response.json(await this.define(url.searchParams.get("word") ?? ""));
     }
 
     if (request.headers.get("Upgrade") !== "websocket") {
@@ -442,6 +455,24 @@ export class Room {
     const row = await this.env.DB.prepare("SELECT 1 FROM words WHERE word = ? LIMIT 1").bind(word).first();
     return row !== null;
   };
+
+  /** MW lookup with a short-TTL in-memory cache. Errors are not cached so a
+   *  transient network/key failure can be retried immediately. */
+  private async define(word: string): Promise<DefineResult> {
+    word = word.trim().toLowerCase();
+    if (!/^[a-z]{2,}$/.test(word)) return { word, error: "word must be 2+ letters a-z" };
+    const now = Date.now();
+    const hit = this.defCache.get(word);
+    if (hit && now - hit.at < DEFINE_TTL_MS) return hit.result;
+    const result = await lookupDefinition(word, this.env.MW_KEY);
+    if (!("error" in result)) {
+      this.defCache.set(word, { result, at: now });
+      if (this.defCache.size > 256) {
+        for (const [k, v] of this.defCache) if (now - v.at >= DEFINE_TTL_MS) this.defCache.delete(k);
+      }
+    }
+    return result;
+  }
 
   private rotateTurn(s: GameState): void {
     s.turnSeat = (s.turnSeat + 1) % s.players.length;

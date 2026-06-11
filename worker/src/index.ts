@@ -1,4 +1,5 @@
 import { enforce, type RateLimiter } from "./ratelimit";
+import { lookupDefinition } from "./define";
 import type { DefineResult } from "./protocol";
 
 export { Room } from "./room";
@@ -14,31 +15,7 @@ export interface Env {
   DEFINE_LIMITER?: RateLimiter;
 }
 
-const MW_BASE = "https://www.dictionaryapi.com/api/v3/references/collegiate/json";
-
-/** Parse the raw MW array into a minimal shape. Real entries are objects with
- *  `shortdef` (string[]) + `fl`; a not-found word yields an array of plain
- *  suggestion strings. The raw payload is never returned or stored. */
-function parseMW(data: unknown, word: string): DefineResult {
-  if (!Array.isArray(data) || data.length === 0) return { word, found: false };
-  if (typeof data[0] === "string") {
-    return { word, found: false, suggestions: (data as string[]).slice(0, 6) };
-  }
-  const entries: { fl: string; defs: string[] }[] = [];
-  for (const e of data) {
-    if (e && typeof e === "object") {
-      const sd = (e as { shortdef?: unknown }).shortdef;
-      if (Array.isArray(sd) && sd.length) {
-        entries.push({
-          fl: typeof (e as { fl?: unknown }).fl === "string" ? (e as { fl: string }).fl : "",
-          defs: (sd as unknown[]).filter((s): s is string => typeof s === "string").slice(0, 3),
-        });
-      }
-    }
-    if (entries.length >= 3) break;
-  }
-  return entries.length ? { word, found: true, entries } : { word, found: false };
-}
+const ROOM_CODE = /^[A-Z0-9]{4,8}$/;
 
 const ROOM_WS = /^\/room\/([^/]+)\/ws$/;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
@@ -75,10 +52,11 @@ export default {
     }
 
     // Definition lookup — live Merriam-Webster proxy. Called only when a player
-    // taps "Define" on a played word. Flow is strictly fetch → parse → return →
-    // discard: the raw MW response is never cached, persisted, or logged.
-    // COMMERCIAL NOTE: MW free tier is non-commercial (1,000 req/day). If this
-    // app ever gets ads or a paid tier, a commercial MW agreement is required.
+    // taps "Define" on a played word. When a room code is supplied the lookup is
+    // routed through that room's Durable Object, which holds a short-TTL (5 min)
+    // in-memory cache so the same word defined by several players in a turn is
+    // fetched once. The MW response is parsed and only ever held transiently in
+    // memory — never written to D1, DO storage, KV, or a log.
     if (url.pathname === "/define") {
       const limited = await enforce(request, env.DEFINE_LIMITER);
       if (limited) return limited;
@@ -88,23 +66,16 @@ export default {
           status: 400,
         });
       }
-      if (!env.MW_KEY) {
-        return Response.json({ word, error: "Definitions are unavailable right now." } satisfies DefineResult, {
-          status: 503,
-        });
+      const room = (url.searchParams.get("room") ?? "").toUpperCase();
+      if (ROOM_CODE.test(room)) {
+        // Per-room cache lives in the DO (shared by everyone in the room).
+        const id = env.ROOM.idFromName(room);
+        return env.ROOM.get(id).fetch(new Request(`https://do/define?word=${word}`));
       }
-      try {
-        const mw = await fetch(`${MW_BASE}/${encodeURIComponent(word)}?key=${env.MW_KEY}`);
-        if (!mw.ok) {
-          return Response.json({ word, error: "Dictionary lookup failed." } satisfies DefineResult, { status: 502 });
-        }
-        const result = parseMW(await mw.json(), word);
-        return Response.json(result satisfies DefineResult);
-      } catch {
-        return Response.json({ word, error: "Could not reach the dictionary." } satisfies DefineResult, {
-          status: 502,
-        });
-      }
+      // No room context (e.g. a direct probe) → uncached one-off lookup.
+      const result = await lookupDefinition(word, env.MW_KEY);
+      const status = "error" in result ? (env.MW_KEY ? 502 : 503) : 200;
+      return Response.json(result satisfies DefineResult, { status });
     }
 
     // Create a room — mints a Durable Object (rate-limited: the DoS target).

@@ -81,8 +81,9 @@ wrangler deploy                                       # worker + assets
 ### Definitions: Merriam-Webster, live, never stored
 - MW Collegiate Dictionary API: `https://www.dictionaryapi.com/api/v3/references/collegiate/json/{word}?key={MW_KEY}`
 - Called **only** when a player explicitly taps "Define / Challenge" on a played word — not on normal plays
-- **Hard compliance rule: never cache, persist, log, or store the MW response anywhere** — not D1, not DO storage, not KV, not a file. Flow is strictly: `fetch → parse → return to client → render → discard`
-- The MW key is a Worker secret (`wrangler secret put MW_KEY`). Never expose it to the frontend; browser calls our Worker endpoint, Worker calls MW.
+- **Hard compliance rule: never *persist* the MW response** — not D1, not DO storage, not KV, not a file, not a log. The base flow is `fetch → parse → return to client → render → discard`.
+- **Narrow exception (added 2026-06-11): a transient, in-memory-only cache is permitted** to dedupe redundant lookups (e.g. several players defining the same word in one turn). It lives only in the room DO's heap (`defCache` in `room.ts`), has a short TTL (`DEFINE_TTL_MS`, 5 min), is bounded, is never written to any durable store, and is lost on hibernation/eviction. Only successful results are cached; errors are not. MW's public ToS has no anti-caching clause; short-lived in-memory caching is the legally defensible line, *persistent* storage is not — so the "never persist" rule above still stands absolutely. The Worker's `/define?word=&room=` route forwards to the room DO so the cache is shared per-room.
+- The MW key is a Worker secret (`wrangler secret put MW_KEY`). Never expose it to the frontend; browser calls our Worker endpoint, Worker (or the room DO it forwards to) calls MW.
 - Response parsing: real entries are objects with `shortdef` (string[]) and `fl` (part of speech). If the word isn't found, MW returns an array of plain strings (suggestions) — treat as "not found". Render `fl` + first 1–3 `shortdef` strings. Handle loading, not-found, and network-error states.
 - `// COMMERCIAL NOTE: MW free tier is non-commercial (1,000 req/day). If this app ever gets ads or a paid tier, a commercial MW agreement is required.` — leave this comment at the call site.
 
