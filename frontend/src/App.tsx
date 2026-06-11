@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
 import { Landing, Lobby } from "./Landing";
 import { Game } from "./Game";
-import { EndScreen } from "./overlays";
+import { EndScreen, Reconnecting } from "./overlays";
 import "./App.css";
 
 const roomFromUrl = () => new URLSearchParams(location.search).get("room");
@@ -63,6 +63,8 @@ function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave
       ) : (
         <Game room={room} onLeave={onLeave} />
       )}
+      {/* Mid-session drop: we have state but lost the socket — show a reconnect veil. */}
+      {state && !connected && <Reconnecting />}
     </div>
   );
 }

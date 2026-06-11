@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlacedTile } from "../../worker/src/engine";
 import type { ClientMessage, DefineResult, PublicState, ServerMessage } from "../../worker/src/protocol";
+import { playChallenge } from "./sound";
 
 const PLAYER_ID_KEY = "upwords:playerId";
 const NAME_KEY = "upwords:name";
@@ -95,6 +96,9 @@ export function useRoom(code: string | null, name: string): RoomConn {
             break;
           case "move_rejected":
             setNotice(msg.reason);
+            break;
+          case "challenge_update":
+            playChallenge(); // someone challenged a word — alert the table
             break;
           case "challenge_result":
             setNotice(msg.challenged.map((c) => `"${c.word}" was challenged`).join(", "));

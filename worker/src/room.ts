@@ -30,6 +30,7 @@ const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't ha
 const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
 const SKIP_MS = 120_000; // auto-skip a disconnected current player's turn after this
 const CLEANUP_MS = 24 * 60 * 60_000; // delete a finished/abandoned room's storage after this
+const LOBBY_TTL_MS = 6 * 60 * 60_000; // delete a created-but-never-started lobby after this
 const CLEANUP_RECHECK_MS = 60 * 60_000; // if someone's still connected at cleanup time, recheck in 1h
 
 type Attachment = { playerId: string };
@@ -62,6 +63,9 @@ export class Room {
       if (!this.state) {
         this.state = freshLobby(code);
         await this.persist();
+        // Arm a self-destruct so a created-but-never-started lobby doesn't linger
+        // forever. Replaced by the turn/cleanup alarms once the game starts.
+        await this.ctx.storage.setAlarm(Date.now() + LOBBY_TTL_MS);
       }
       return Response.json({ ok: true });
     }
@@ -106,10 +110,10 @@ export class Room {
     });
   }
 
-  /** The single DO Alarm serves three phase-exclusive purposes:
-   *  - pending  → challenge-window backstop (auto-accept / tally)
-   *  - playing  → auto-skip a disconnected current player's turn
-   *  - gameover → delete the room's storage once everyone has left */
+  /** The single DO Alarm serves phase-exclusive purposes:
+   *  - pending           → challenge-window backstop (auto-accept / tally)
+   *  - playing           → auto-skip a disconnected current player's turn
+   *  - lobby / gameover  → delete the room's storage once everyone has left */
   async alarm(): Promise<void> {
     await this.serialize(async () => {
       const s = this.state;
@@ -124,14 +128,13 @@ export class Room {
         if (cur && !cur.connected) await this.doPass(s); // away player → skip their turn
         return;
       }
-      if (s.phase === "gameover") {
-        if (s.players.some((p) => p.connected)) {
-          await this.ctx.storage.setAlarm(Date.now() + CLEANUP_RECHECK_MS); // someone's reviewing — wait
-        } else {
-          await this.ctx.storage.deleteAll();
-          this.state = null;
-          this.defCache.clear();
-        }
+      // Abandoned lobby or finished game → reclaim storage once no one is left.
+      if (s.players.some((p) => p.connected)) {
+        await this.ctx.storage.setAlarm(Date.now() + CLEANUP_RECHECK_MS); // still here — wait
+      } else {
+        await this.ctx.storage.deleteAll();
+        this.state = null;
+        this.defCache.clear();
       }
     });
   }

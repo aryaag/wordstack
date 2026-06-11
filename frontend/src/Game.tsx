@@ -7,6 +7,7 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
+import { playPlace } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { AVATAR_COLORS, displayLetter, Icon, initials, Tile } from "./lib";
@@ -122,6 +123,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       const m = new Map(staged);
       m.set(key, { letter: myRack[selected], rackIndex: selected });
       stageTiles(m);
+      playPlace();
       setSelected(null);
     } else {
       openInspect(r, c);
@@ -147,6 +149,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     const rackIndex = source.kind === "rack" ? source.rackIndex : staged.get(source.key)!.rackIndex;
     m.set(key, { letter, rackIndex });
     stageTiles(m);
+    playPlace();
     setSelected(null);
   };
 

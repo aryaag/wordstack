@@ -372,6 +372,18 @@ function DefineModal({ word, room, onClose }: { word: string; room?: string; onC
   );
 }
 
+// ── Reconnecting overlay (own socket dropped mid-session) ────────────────────
+export function Reconnecting() {
+  return (
+    <div className="reconnect-scrim">
+      <div className="reconnect-card">
+        <span className="spinner" />
+        Reconnecting…
+      </div>
+    </div>
+  );
+}
+
 // ── End screen (game over / canceled) ───────────────────────────────────────
 export function EndScreen({ state, onLeave }: { state: PublicState; onLeave: () => void }) {
   const ranked = [...state.players].sort((a, b) => b.score - a.score);

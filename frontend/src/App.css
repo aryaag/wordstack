@@ -569,6 +569,44 @@ svg {
   font-size: 12px;
 }
 
+/* ── Reconnecting veil (own socket dropped) ───────────────────────────────── */
+.reconnect-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 12, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  z-index: 60;
+  backdrop-filter: blur(1px);
+}
+.reconnect-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: var(--bg-app);
+  border: 1px solid var(--line-strong);
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--info-fg);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Modal / turn review ──────────────────────────────────────────────── */
 .scrim {
   position: fixed;
