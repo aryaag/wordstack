@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
-import { Landing, Lobby, NamePrompt } from "./Landing";
+import { Landing, Lobby } from "./Landing";
 import { Game } from "./Game";
 import { EndScreen } from "./overlays";
 import "./App.css";
@@ -10,58 +10,37 @@ function setRoomUrl(code: string | null) {
   const url = new URL(location.href);
   if (code) url.searchParams.set("room", code);
   else url.searchParams.delete("room");
-  history.pushState({}, "", url);
+  history.replaceState({}, "", url);
 }
 
 export function App() {
-  const [code, setCode] = useState<string | null>(roomFromUrl());
+  // `joined` = the room the player has actually committed to (drives the room view).
+  // A `?room=` link does NOT auto-join — it only pre-fills the code on the landing
+  // page, so the player can adjust their name and join themselves.
+  const [joined, setJoined] = useState<string | null>(null);
   const [name, setName] = useState(getStoredName());
 
-  useEffect(() => {
-    const onpop = () => setCode(roomFromUrl());
-    addEventListener("popstate", onpop);
-    return () => removeEventListener("popstate", onpop);
-  }, []);
-
-  const go = (c: string | null) => {
-    setRoomUrl(c);
-    setCode(c);
+  const enter = (c: string) => {
+    setStoredName(name.trim());
+    const code = c.toUpperCase();
+    setRoomUrl(code);
+    setJoined(code);
   };
 
-  if (!code) {
+  if (!joined) {
     return (
       <div className="app">
         <Landing
           name={name}
           setName={setName}
-          onHost={async () => {
-            setStoredName(name.trim());
-            go(await createRoom());
-          }}
-          onJoin={(c) => {
-            setStoredName(name.trim());
-            go(c.toUpperCase());
-          }}
+          initialCode={roomFromUrl() ?? ""}
+          onHost={async () => enter(await createRoom())}
+          onJoin={enter}
         />
       </div>
     );
   }
-  // A room link was opened without a name yet → ask for it before joining.
-  if (!name.trim()) {
-    return (
-      <div className="app">
-        <NamePrompt
-          code={code}
-          onSubmit={(n) => {
-            setStoredName(n);
-            setName(n);
-          }}
-          onCancel={() => go(null)}
-        />
-      </div>
-    );
-  }
-  return <RoomView code={code} name={name.trim()} onLeave={() => go(null)} />;
+  return <RoomView code={joined} name={name.trim()} onLeave={() => { setRoomUrl(null); setJoined(null); }} />;
 }
 
 function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {

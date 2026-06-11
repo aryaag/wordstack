@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getStoredName, type RoomConn } from "./useRoom";
+import { type RoomConn } from "./useRoom";
 import { Icon, Tile } from "./lib";
 
 const LOGO = "UPWORDS".split("");
@@ -8,16 +8,19 @@ const RAISED: Record<number, number> = { 0: 2, 3: 3 }; // index → height badge
 export function Landing({
   name,
   setName,
+  initialCode = "",
   onHost,
   onJoin,
 }: {
   name: string;
   setName: (n: string) => void;
+  initialCode?: string; // pre-filled from a shared ?room= link
   onHost: () => void;
   onJoin: (code: string) => void;
 }) {
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode.toUpperCase());
   const [busy, setBusy] = useState(false);
+  const fromLink = !!initialCode;
 
   const host = async () => {
     setBusy(true);
@@ -37,9 +40,19 @@ export function Landing({
       </div>
       <p className="tagline">Stack letters, climb words</p>
       <p className="sub">
-        A 10×10 word game where tiles stack up
-        <br />
-        and taller words score higher.
+        {fromLink ? (
+          <>
+            You’re invited to room <b>{code}</b>.
+            <br />
+            Confirm your name and join below.
+          </>
+        ) : (
+          <>
+            A 10×10 word game where tiles stack up
+            <br />
+            and taller words score higher.
+          </>
+        )}
       </p>
 
       <input
@@ -47,6 +60,7 @@ export function Landing({
         placeholder="Your name"
         value={name}
         maxLength={16}
+        autoFocus={fromLink}
         onChange={(e) => setName(e.target.value)}
         style={{ marginBottom: name.trim() ? 14 : 6 }}
       />
@@ -68,55 +82,12 @@ export function Landing({
         onChange={(e) => setCode(e.target.value.toUpperCase())}
       />
       <button
-        className="cta"
+        className={`cta${fromLink ? " primary" : ""}`}
         style={{ marginTop: 10 }}
         disabled={!code.trim() || !name.trim()}
         onClick={() => onJoin(code.trim())}
       >
         Join game
-      </button>
-    </div>
-  );
-}
-
-/** Shown when someone opens a room link but hasn't set a name yet. */
-export function NamePrompt({
-  code,
-  onSubmit,
-  onCancel,
-}: {
-  code: string;
-  onSubmit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(getStoredName());
-  const submit = () => {
-    if (name.trim()) onSubmit(name.trim());
-  };
-  return (
-    <div className="landing">
-      <div className="logo">
-        {LOGO.map((l, i) => (
-          <Tile key={i} letter={l} height={RAISED[i] ?? 1} />
-        ))}
-      </div>
-      <p className="tagline">Joining room {code}</p>
-      <p className="sub">Enter your name so other players know who you are.</p>
-      <input
-        className="field"
-        placeholder="Your name"
-        value={name}
-        maxLength={16}
-        autoFocus
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        style={{ marginBottom: 14 }}
-      />
-      <button className="cta primary" disabled={!name.trim()} onClick={submit}>
-        Join game
-      </button>
-      <button className="cta" style={{ marginTop: 10 }} onClick={onCancel}>
-        Back
       </button>
     </div>
   );

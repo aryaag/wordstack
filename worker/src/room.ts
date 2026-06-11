@@ -303,10 +303,16 @@ export class Room {
     pending.deadline = Date.now() + REVIEW_BACKSTOP_MS;
     await this.ctx.storage.setAlarm(pending.deadline);
     this.broadcast({ type: "challenge_update", playerId: pid, wordIndex });
-    await this.persistAndBroadcast();
-    // With a single opponent there's no one else to deliberate with, so this
-    // resolves immediately; with 3–4 players it waits for the others to vote.
-    await this.checkReview();
+    // With a single opponent there's no one else to deliberate with, so the
+    // challenge resolves the move immediately (the lone "not valid" stands) —
+    // skip showing the voting UI. With 3–4 players, broadcast the review state
+    // so the others can vote.
+    const others = s.players.filter((p) => p.id !== pending.submitterId);
+    if (others.every((p) => pending.votes[p.id] !== undefined)) {
+      await this.finishReview();
+    } else {
+      await this.persistAndBroadcast();
+    }
   }
 
   /** Open stage: a player accepts the move without challenging. */
