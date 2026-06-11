@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
-import { AVATAR_COLORS, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
+import { AVATAR_COLORS, displayLetter, Icon, initials, playedWords, Tile, TimerRing } from "./lib";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
 const colorOf = (p?: PlayerState) => (p ? AVATAR_COLORS[p.seat % 4] : FALLBACK);
@@ -141,6 +141,7 @@ export function TurnReview({
   const submitter = state.players.find((p) => p.id === pending.submitterId);
   const isSubmitter = pending.submitterId === me;
   const formed = extractWords(state.board, pending.placed);
+  const played = playedWords(state.history); // words from earlier turns → flag repeats
   const col = colorOf(submitter);
   const others = state.players.filter((p) => p.id !== pending.submitterId);
 
@@ -265,6 +266,7 @@ export function TurnReview({
               </div>
               <div className="wordrow">
                 <span className="pill">+{pending.words[i]?.points ?? 0}</span>
+                {played.has(w.word) && <span className="repeat-badge">↻ played before</span>}
                 <div className="word-actions">
                   <button className="text-btn define" onClick={() => setDefineWord(w.word)}>
                     <Icon name="book" size={15} /> Define

@@ -364,6 +364,14 @@ svg {
 .preview.bad {
   color: var(--warn-fg);
 }
+.preview {
+  flex-wrap: wrap;
+}
+.preview-note {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
 .swatch {
   width: 11px;
   height: 11px;
@@ -684,6 +692,15 @@ svg {
   border-radius: var(--r-md);
   background: var(--good-bg);
   color: var(--good-fg);
+}
+.repeat-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  white-space: nowrap;
 }
 .word-actions {
   display: flex;

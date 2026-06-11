@@ -1,4 +1,9 @@
 import type { JSX, PointerEvent as ReactPointerEvent } from "react";
+import type { TurnRecord } from "../../worker/src/protocol";
+
+/** Set of every word committed in earlier turns — used to flag repeats. */
+export const playedWords = (history: TurnRecord[]): Set<string> =>
+  new Set(history.flatMap((t) => t.words.map((w) => w.word)));
 
 /** Committed tile faces by height (1..5): light cream → deep gold. */
 export const TILE_FACES = ["#F6E9D2", "#EED9AE", "#E6C887", "#DDB75F", "#D2A23C"];

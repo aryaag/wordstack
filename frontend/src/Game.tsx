@@ -10,7 +10,7 @@ import type { RoomConn } from "./useRoom";
 import { playPlace } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
-import { AVATAR_COLORS, displayLetter, Icon, initials, Tile } from "./lib";
+import { AVATAR_COLORS, displayLetter, Icon, initials, playedWords, Tile } from "./lib";
 
 interface Staged {
   letter: string;
@@ -203,14 +203,19 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const placed: PlacedTile[] = mapToPlaced(staged);
   const validation = staged.size ? validatePlacement(state.board, placed, myRack, DEFAULT_CONFIG) : null;
   const valid = validation?.ok ?? false;
-  let preview: { text: string; bad: boolean } | null = null;
+  let preview: { text: string; bad: boolean; note?: string } | null = null;
   if (staged.size && validation) {
     if (validation.ok) {
       const words = extractWords(state.board, placed);
       const score = scoreTurn(words, placed, DEFAULT_CONFIG);
+      const played = playedWords(state.history);
+      const repeats = [...new Set(words.map((w) => w.word).filter((w) => played.has(w)))];
       preview = {
         text: `${staged.size} new · ${words.map((w) => displayLetter(w.word)).join(" + ")} · +${score.total} pts`,
         bad: false,
+        note: repeats.length
+          ? `↻ ${repeats.map(displayLetter).join(", ")} already played this game`
+          : undefined,
       };
     } else {
       preview = { text: validation.reason, bad: true };
@@ -281,7 +286,12 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             <span>{state.bagCount} tiles left</span>
           </div>
 
-          {isMyTurn && <div className={`preview${preview?.bad ? " bad" : ""}`}>{preview?.text}</div>}
+          {isMyTurn && (
+            <div className={`preview${preview?.bad ? " bad" : ""}`}>
+              {preview?.text}
+              {preview?.note && <span className="preview-note">{preview.note}</span>}
+            </div>
+          )}
 
           <div className="tray">
             <div className="rack" data-rack>

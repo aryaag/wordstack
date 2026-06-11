@@ -1,7 +1,6 @@
 import {
   applyPlacement,
   DEFAULT_CONFIG,
-  detectTrivialSuffixes,
   draw,
   endgamePenalty,
   extractWords,
@@ -232,12 +231,10 @@ export class Room {
     const placement = validatePlacement(s.board, placed, player.rack, CONFIG);
     if (!placement.ok) return this.send(ws, { type: "error", message: placement.reason });
 
+    // Word validity (including "is this just a trivial plural/past tense?") is
+    // decided by human challenge, never by the engine. The only thing we flag is
+    // informational — whether a word has been played before (see history).
     const words = extractWords(s.board, placed);
-    const triviality = await detectTrivialSuffixes(words, this.isValidWord);
-    if (triviality.allTrivial) {
-      return this.send(ws, { type: "error", message: triviality.reason ?? "trivial suffix" });
-    }
-
     const score = scoreTurn(words, placed, CONFIG);
     const stances: PendingMove["stances"] = {};
     for (const p of s.players) if (p.id !== player.id) stances[p.id] = "pending";
@@ -546,11 +543,6 @@ export class Room {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  private isValidWord = async (word: string): Promise<boolean> => {
-    const row = await this.env.DB.prepare("SELECT 1 FROM words WHERE word = ? LIMIT 1").bind(word).first();
-    return row !== null;
-  };
-
   /** MW lookup with a short-TTL in-memory cache. Errors are not cached so a
    *  transient network/key failure can be retried immediately. */
   private async define(word: string): Promise<DefineResult> {

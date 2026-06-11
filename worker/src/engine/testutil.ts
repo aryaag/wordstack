@@ -30,9 +30,3 @@ export function placeAcross(row: number, col: number, tiles: Tile[]): PlacedTile
 export function placeDown(row: number, col: number, tiles: Tile[]): PlacedTile[] {
   return tiles.map((t, i) => ({ row: row + i, col, letter: t }));
 }
-
-/** A Set-backed `isValidWord` fake. */
-export function fakeLexicon(words: string[]): (w: string) => Promise<boolean> {
-  const set = new Set(words);
-  return (w: string) => Promise.resolve(set.has(w));
-}

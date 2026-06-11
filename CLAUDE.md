@@ -71,8 +71,12 @@ wrangler deploy                                       # worker + assets
 
 ## Architecture decisions (already made — implement exactly these)
 
-### Word validity: local, instant, D1-only
-- Validation against `words(word TEXT PRIMARY KEY)` in D1 — pure set membership
+### Word validity: human-consensus only; D1 lexicon backs just `/validate`
+> **Update (2026-06-12):** gameplay no longer uses the lexicon for validity at all
+> — word validity (and trivial plurals/past-tense) is decided entirely by human
+> challenge. The D1 lexicon + `GET /validate` endpoint remain as a standalone
+> utility (and for any future tooling), but the room/engine never query it.
+- `GET /validate` checks `words(word TEXT PRIMARY KEY)` in D1 — pure set membership
 - Never call an external API to validate a word
 - Lexicon: ~50,000–70,000 entries, SCOWL size 50–70 buckets, **must include inflected forms** (`cats`, `running`, `taller`) — SCOWL at these sizes is lemma-heavy; verify inflection coverage and add a step if needed
 - `scripts/build-wordlist.ts` must be reproducible: download source → lowercase → dedup → filter → emit seed SQL. Document source + license in the repo.
@@ -91,11 +95,11 @@ wrangler deploy                                       # worker + assets
 
 Default mode: `"challenge"`. Server config: `VALIDATION_MODE: "auto" | "challenge"` + `challengePenalty: boolean` (default `false`).
 
-**Challenge resolution is by HUMAN CONSENSUS — not the dictionary.** D1 is never consulted to decide a challenged word (it is only used for the trivial-suffix check). A challenge does **not** reject instantly — it pauses the game into a **review/vote**, and the move plays only if **every** non-submitter allows it. Any single upheld challenge (a "not valid" vote) rejects the whole move.
+**Challenge resolution is by HUMAN CONSENSUS — not the dictionary.** D1 is never consulted during gameplay at all (validity, including trivial plurals/past-tense, is entirely human-decided; the lexicon DB now backs only the standalone `GET /validate` endpoint). A challenge does **not** reject instantly — it pauses the game into a **review/vote**, and the move plays only if **every** non-submitter allows it. Any single upheld challenge (a "not valid" vote) rejects the whole move.
 
 **Two-stage post-submit flow (confirmed design):**
 
-On submit, the DO hard-validates placement + trivial-suffix (immediate `error` if broken, no popup), extracts words + tentative scores, enters `pending` with **stage `"open"`**, sets a 30s **DO Alarm** (alarms survive hibernation; never `setTimeout`), and broadcasts `move_pending`.
+On submit, the DO hard-validates **placement only** (immediate `error` if broken, no popup), extracts words + tentative scores, enters `pending` with **stage `"open"`**, sets a 30s **DO Alarm** (alarms survive hibernation; never `setTimeout`), and broadcasts `move_pending`.
 
 **Open stage** — all players see the words + tentative points. Non-submitters can **Accept** or **Challenge** (the submitter's popup is read-only). A 30s countdown auto-accepts the unresolved. If every non-submitter accepts, or the timer fires with no challenge → the move commits (`move_applied`).
 
@@ -132,33 +136,19 @@ The **View definition** action (MW lookup, Phase 6) is a separate, informational
 - **Cannot place the same letter on top of itself** (no `A` on `A`).
 - **Cannot stack over an entire existing word in one turn** — at least 1 letter from the previous word must remain unmodified. You cannot change every tile of an existing word in a single play.
 
-### Trivial suffixes (special rule — easy to get wrong)
-The following plays are **not considered forming a new word** and are illegal as standalone plays:
-- Adding **S** to make a word plural (CATS on CAT)
-- Adding **ES** to pluralise or conjugate (DRESSES on DRESS, BUZZES on BUZZ)
-- Adding **D** or **ED** to make a word past tense (JUMPED on JUMP, BAKED on BAKE)
+### Trivial suffixes (plurals / past tense) — NOT auto-enforced (removed 2026-06-12)
+The physical rule disallows plays that only add a trivial **S/ES** (plural) or
+**D/ED** (past tense) to an existing word (CATS on CAT, JUMPED on JUMP). We do
+**not** try to detect this in code. A reliable heuristic is impossible without
+real morphology: the old positional check produced false positives (it rejected
+MAD because "MA" pre-existed, and SLID because "SLI" pre-existed, even though
+both are genuinely new words). **All word validity — including "is this just a
+trivial inflection?" — is now decided by human challenge, never by the engine.**
 
-A move is only illegal on this basis if **all** words formed/modified by the turn are trivially derived. If even one word is genuinely new, the move is legal.
-
-**Detection algorithm (board-state diff + one lexicon lookup per 2-char suffix):**
-
-All "pre-existing" checks below are **position-specific**: compare what the **same cells** that form the current word spelled before the move, not whether the stem exists anywhere else on the board. If JUMP exists elsewhere on the board and a player changes PUMPED → JUMPED by stacking J on P, those cells previously spelled PUMP — not JUMP — so the check correctly does not fire.
-
-Check suffixes longest-first. For each word formed/modified this turn:
-
-1. If `word` ends in `ED` and the cells for `word[:-2]` spelled that same string before the move:
-   - Secondary check: is `word[:-1]` (the D-only stem) a valid lexicon word **and** does it contain at least one tile placed this turn?
-   - If yes → legitimate alternative decomposition (e.g. PAL pre-existing + E+D placed → PALE+D; PALE is in lexicon and E was placed) → **not trivial**
-   - If no → **trivially derived** (e.g. JUMP+ED; JUMPE is not a word)
-2. If `word` ends in `ES` and the cells for `word[:-2]` spelled that same string before the move:
-   - Secondary check: is `word[:-1]` (the S-only stem) a valid lexicon word **and** does it contain at least one tile placed this turn?
-   - If yes → legitimate alternative (e.g. FO pre-existing + E+S placed → FOE+S; FOE is in lexicon and E was placed) → **not trivial**
-   - If no → **trivially derived** (e.g. DRESS+ES; DRESSE is not a word)
-3. If `word` ends in `D` (not already caught by check 1) and the cells for `word[:-1]` spelled that same string before the move → **trivially derived**
-4. If `word` ends in `S` (not already caught by check 2) and the cells for `word[:-1]` spelled that same string before the move → **trivially derived**
-5. Otherwise → **genuinely new word**
-
-If **all** words formed this turn are trivially derived → reject with a specific error message naming the suffix rule.
+The only thing the system flags is **informational, not a block**: if a word
+formed this turn was already played earlier in the game (it appears in
+`history`), the UI shows a small "↻ played before" note in the live preview and
+the turn-review popup. Repeating a word is legal; the note just surfaces it.
 
 ### Scoring (critical — unit-test all cases)
 - For each word **formed or modified** this turn:
@@ -222,8 +212,9 @@ The DO sends the full game state to every connected client. Each player's rack d
   - Checks: single line, adjacency after first move, height ≤ 5, no same-letter-on-top, only 1 tile per cell per turn, cannot overwrite entire existing word
 - `extractWords(board, placedTiles)` → distinct horizontal + vertical runs of length ≥ 2 through newly placed/modified tiles, with per-tile heights
 - `scoreTurn(words, placedTiles, config)` → flat-vs-stacked rule + Qu bonus + bingo bonus
-- Word validity injected as `isValidWord(word: string) => Promise<boolean>` — engine stays pure, DO supplies the D1-backed implementation
-- Tests must cover: flat (2/letter) vs stacked (sum-of-heights), multi-word turns, shared tiles, illegal stacks, first-move center requirement, Qu bonus (including +4 at intersection), bingo bonus, trivial-suffix rejection (S / ES / D / ED alone), the PAL→PALED false-positive case, cannot-overwrite-entire-word rule
+- `endgamePenalty(leftoverTiles, config)` → −5/tile end-of-game penalty
+- The engine never judges word validity (no lexicon/D1 dependency) — validity is human-consensus via the challenge flow in the DO
+- Tests must cover: flat (2/letter) vs stacked (sum-of-heights), multi-word turns, shared tiles, illegal stacks, first-move center requirement, Qu bonus (including +4 at intersection), bingo bonus, endgame tile penalty, cannot-overwrite-entire-word rule
 
 ## WebSocket message protocol
 
