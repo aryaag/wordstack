@@ -63,3 +63,21 @@ export function playChallenge(): void {
   blip({ freq: 480, to: 360, type: "square", dur: 0.12, gain: 0.09 });
   blip({ freq: 320, to: 220, type: "square", dur: 0.16, gain: 0.09, delay: 0.12 });
 }
+
+/** Gentle single "boop-up" when a player submits their turn. */
+export function playSubmit(): void {
+  blip({ freq: 440, to: 600, type: "sine", dur: 0.13, gain: 0.13 });
+}
+
+/** Cheerful ascending major triad when a move is accepted (committed). */
+export function playAccepted(): void {
+  blip({ freq: 523, type: "sine", dur: 0.1, gain: 0.11 }); // C5
+  blip({ freq: 659, type: "sine", dur: 0.1, gain: 0.11, delay: 0.09 }); // E5
+  blip({ freq: 784, type: "sine", dur: 0.18, gain: 0.12, delay: 0.18 }); // G5
+}
+
+/** Somber descending two-tone when a move is rejected by challenge. */
+export function playRejected(): void {
+  blip({ freq: 300, to: 240, type: "sawtooth", dur: 0.16, gain: 0.1 });
+  blip({ freq: 200, to: 150, type: "sawtooth", dur: 0.26, gain: 0.1, delay: 0.16 });
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlacedTile } from "../../worker/src/engine";
 import type { ClientMessage, DefineResult, PublicState, ServerMessage } from "../../worker/src/protocol";
-import { playChallenge } from "./sound";
+import { playAccepted, playChallenge, playRejected, playSubmit } from "./sound";
 
 const PLAYER_ID_KEY = "upwords:playerId";
 const NAME_KEY = "upwords:name";
@@ -91,11 +91,16 @@ export function useRoom(code: string | null, name: string): RoomConn {
           case "state":
             setState(msg.game);
             break;
+          case "move_pending":
+            playSubmit(); // a player submitted their turn
+            break;
           case "move_applied":
             setNotice(`Move accepted — +${msg.points} points`);
+            playAccepted(); // move committed (accepted / challenge allowed)
             break;
           case "move_rejected":
             setNotice(msg.reason);
+            playRejected(); // move rejected by challenge
             break;
           case "challenge_update":
             playChallenge(); // someone challenged a word — alert the table
