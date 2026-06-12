@@ -1,14 +1,10 @@
-# Upwords Online — Claude Code Guide
+# Wordstack — Claude Code Guide
 
-> **TODO (after Phase 7, once live & stable):** split this file — move the deep
-> reference (game rules, scoring, tile distribution, challenge flow, WS protocol)
-> into a repo `docs/` folder and keep this CLAUDE.md lean (stack, conventions,
-> commands, gotchas, links to docs/). Where code is already the source of truth
-> (engine, `protocol.ts`), describe intent and point at the code, don't duplicate.
-
-## Project overview
-
-Real-time multiplayer web implementation of **Upwords** — the Scrabble-like board game where tiles can be stacked on top of each other to change words. 2–4 players share a room and take turns. Stack height determines scoring. Everything runs on Cloudflare.
+Real-time multiplayer web implementation of **Upwords** — the Scrabble-like board
+game where tiles stack on top of each other to change words. 2–4 players share a
+room and take turns; stack height determines scoring. Everything runs on
+Cloudflare. User-facing brand is **Wordstack**; the codebase/infra keep the
+original `upwords` name (see the naming gotcha below).
 
 ## Stack
 
@@ -17,7 +13,7 @@ Real-time multiplayer web implementation of **Upwords** — the Scrabble-like bo
 | Frontend | React + Vite + TypeScript, served via Workers Assets |
 | Worker | Cloudflare Workers — HTTP API + static asset serving |
 | Game room | Cloudflare Durable Objects — one DO per room, authoritative state + WebSockets |
-| Lexicon DB | Cloudflare D1 (SQLite) — word validity only (`words` table) |
+| Lexicon DB | Cloudflare D1 (SQLite) — word validity only (`words` table), standalone `/validate` |
 | CLI / deploy | Wrangler v3 |
 
 All infrastructure is Cloudflare-only — no separate server, no Docker, no external DB.
@@ -26,40 +22,59 @@ All infrastructure is Cloudflare-only — no separate server, no Docker, no exte
 
 ```
 upwords/
-├── frontend/              # React + Vite + TS
+├── frontend/              # React + Vite + TS (mobile-first UI)
 │   ├── src/
 │   └── vite.config.ts
-├── worker/                # Cloudflare Worker entry + Durable Object
+├── worker/
 │   ├── src/
-│   │   ├── index.ts       # Worker: routing, MW proxy, static assets
-│   │   ├── room.ts        # Durable Object: game state, WebSocket fan-out
-│   │   └── engine/        # Pure game engine (no I/O, fully unit-tested)
+│   │   ├── index.ts       # Worker: routing, /validate, /define MW proxy, static assets
+│   │   ├── room.ts        # Durable Object: game state, WS fan-out, challenge/alarm logic
+│   │   ├── define.ts      # MW fetch + parse (shared by Worker route + DO)
+│   │   ├── protocol.ts    # Shared WS message + state types (source of truth)
+│   │   └── engine/        # Pure game engine (no I/O, fully unit-tested) + config.ts
 │   └── wrangler.toml
-├── scripts/
-│   └── build-wordlist.ts  # Reproducible lexicon pipeline (download→filter→seed)
-├── migrations/
-│   └── 0001_words.sql     # D1 schema: words(word TEXT PRIMARY KEY)
+├── scripts/build-wordlist.ts  # Reproducible lexicon pipeline (download→filter→seed)
+├── migrations/0001_words.sql  # D1 schema: words(word TEXT PRIMARY KEY)
+├── docs/                  # Deep reference (see below)
 └── CLAUDE.md
 ```
+
+## Documentation
+
+This file stays lean. The deep reference lives in [`docs/`](docs/README.md):
+
+- [docs/game-rules.md](docs/game-rules.md) — board, placing/stacking, tile bag, actions, illegal words, endgame, Qu, rack privacy
+- [docs/scoring.md](docs/scoring.md) — flat vs stacked scoring, Qu & bingo bonuses, endgame penalty
+- [docs/challenge-flow.md](docs/challenge-flow.md) — validation mode + two-stage human-consensus challenge/vote
+- [docs/architecture.md](docs/architecture.md) — word-validity model, MW definitions (compliance), live state in the DO, engine + WS-protocol code pointers
+
+**Where code is the source of truth, read the code — don't trust a prose copy:**
+- [`worker/src/engine/`](worker/src/engine/) — rules; [`config.ts`](worker/src/engine/config.ts) — all tunable values.
+- [`worker/src/protocol.ts`](worker/src/protocol.ts) — `ClientMessage` / `ServerMessage` unions + `GameState` shapes.
+- [`worker/src/room.ts`](worker/src/room.ts) — authoritative state, WS fan-out, challenge resolution, DO alarms.
 
 ## Key commands
 
 ```bash
 # local dev
-wrangler dev                                          # worker + DO on http://localhost:8787
+npx wrangler dev -c worker/wrangler.toml              # worker + DO on http://localhost:8787
 npx vite --config frontend/vite.config.ts             # frontend dev server
+
+# tests
+npx vitest run                                        # engine unit tests
 
 # lexicon
 npx ts-node scripts/build-wordlist.ts                 # rebuild word list
-wrangler d1 execute upwords-db --local --file migrations/0001_words.sql
-wrangler d1 execute upwords-db --file migrations/0001_words.sql  # remote
+npx wrangler d1 execute upwords-db --local --file migrations/0001_words.sql
+npx wrangler d1 execute upwords-db --file migrations/0001_words.sql        # remote
 
-# secrets
-wrangler secret put MW_KEY                            # Merriam-Webster API key
-
-# deploy
-wrangler deploy                                       # worker + assets
+# secrets / deploy
+CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN \
+  npx wrangler secret put MW_KEY -c worker/wrangler.toml                   # Merriam-Webster key
+npx wrangler deploy -c worker/wrangler.toml                                # worker + assets
 ```
+
+`wrangler` is **not** installed globally — always `npx wrangler`.
 
 ## Git conventions
 
@@ -67,218 +82,56 @@ wrangler deploy                                       # worker + assets
 - Commit format: `<type>: <what changed>` — e.g. `feat: add word validation endpoint`
 - Types: `feat`, `fix`, `refactor`, `chore`, `docs`
 - PRs go against `main`; squash-merge preferred for small changes
-- Commit at each phase boundary (see Phases below) so each phase is reviewable
 
-## Architecture decisions (already made — implement exactly these)
-
-### Word validity: human-consensus only; D1 lexicon backs just `/validate`
-> **Update (2026-06-12):** gameplay no longer uses the lexicon for validity at all
-> — word validity (and trivial plurals/past-tense) is decided entirely by human
-> challenge. The D1 lexicon + `GET /validate` endpoint remain as a standalone
-> utility (and for any future tooling), but the room/engine never query it.
-- `GET /validate` checks `words(word TEXT PRIMARY KEY)` in D1 — pure set membership
-- Never call an external API to validate a word
-- Lexicon: ~50,000–70,000 entries, SCOWL size 50–70 buckets, **must include inflected forms** (`cats`, `running`, `taller`) — SCOWL at these sizes is lemma-heavy; verify inflection coverage and add a step if needed
-- `scripts/build-wordlist.ts` must be reproducible: download source → lowercase → dedup → filter → emit seed SQL. Document source + license in the repo.
-- Expose the frequency cutoff as a tunable knob in config
-
-### Definitions: Merriam-Webster, live, never stored
-- MW Collegiate Dictionary API: `https://www.dictionaryapi.com/api/v3/references/collegiate/json/{word}?key={MW_KEY}`
-- Called **only** when a player explicitly taps "Define / Challenge" on a played word — not on normal plays
-- **Hard compliance rule: never *persist* the MW response** — not D1, not DO storage, not KV, not a file, not a log. The base flow is `fetch → parse → return to client → render → discard`.
-- **Narrow exception (added 2026-06-11): a transient, in-memory-only cache is permitted** to dedupe redundant lookups (e.g. several players defining the same word in one turn). It lives only in the room DO's heap (`defCache` in `room.ts`), has a short TTL (`DEFINE_TTL_MS`, 5 min), is bounded, is never written to any durable store, and is lost on hibernation/eviction. Only successful results are cached; errors are not. MW's public ToS has no anti-caching clause; short-lived in-memory caching is the legally defensible line, *persistent* storage is not — so the "never persist" rule above still stands absolutely. The Worker's `/define?word=&room=` route forwards to the room DO so the cache is shared per-room.
-- The MW key is a Worker secret (`wrangler secret put MW_KEY`). Never expose it to the frontend; browser calls our Worker endpoint, Worker (or the room DO it forwards to) calls MW.
-- Response parsing: real entries are objects with `shortdef` (string[]) and `fl` (part of speech). If the word isn't found, MW returns an array of plain strings (suggestions) — treat as "not found". Render `fl` + first 1–3 `shortdef` strings. Handle loading, not-found, and network-error states.
-- `// COMMERCIAL NOTE: MW free tier is non-commercial (1,000 req/day). If this app ever gets ads or a paid tier, a commercial MW agreement is required.` — leave this comment at the call site.
-
-### Validation mode and challenge flow
-
-Default mode: `"challenge"`. Server config: `VALIDATION_MODE: "auto" | "challenge"` + `challengePenalty: boolean` (default `false`).
-
-**Challenge resolution is by HUMAN CONSENSUS — not the dictionary.** D1 is never consulted during gameplay at all (validity, including trivial plurals/past-tense, is entirely human-decided; the lexicon DB now backs only the standalone `GET /validate` endpoint). A challenge does **not** reject instantly — it pauses the game into a **review/vote**, and the move plays only if **every** non-submitter allows it. Any single upheld challenge (a "not valid" vote) rejects the whole move.
-
-**Two-stage post-submit flow (confirmed design):**
-
-On submit, the DO hard-validates **placement only** (immediate `error` if broken, no popup), extracts words + tentative scores, enters `pending` with **stage `"open"`**, sets a 30s **DO Alarm** (alarms survive hibernation; never `setTimeout`), and broadcasts `move_pending`.
-
-**Open stage** — all players see the words + tentative points. Non-submitters can **Accept** or **Challenge** (the submitter's popup is read-only). A 30s countdown auto-accepts the unresolved. If every non-submitter accepts, or the timer fires with no challenge → the move commits (`move_applied`).
-
-**Review stage** — the moment any non-submitter challenges a word, the move enters **stage `"review"`**: the auto-accept timer **pauses** (a long DO-Alarm backstop only prevents a permanent hang), the table deliberates out loud, and every non-submitter casts a **vote on the word's validity** — framed as *"Is WORD a valid word? Yes (valid) / No (not valid)"*, explicitly **not** a vote on whether the challenge was fair. One clarifying sentence sits directly above the Yes/No buttons. The challenge itself counts as the challenger's **No** vote (they may switch to Yes to withdraw).
-
-**Resolution** (when all non-submitters have voted, or the backstop fires with unvoted = allow):
-- **All allow** → `move_applied` (committed, scored, rack refilled).
-- **Any reject** → the entire move is rejected: the submitter takes the tiles back and replays. The DO broadcasts `challenge_result` then `move_rejected`. No D1 check, no turn skip for the challenger.
-
-With a single opponent there is no one else to deliberate with, so a challenge resolves immediately (the lone challenger's No stands). A move is always accepted or rejected as a unit — no partial acceptance.
-
-The **View definition** action (MW lookup, Phase 6) is a separate, informational button and never counts as a vote.
-
-### Live game state lives in the Durable Object, NOT D1
-- D1 holds only the word lexicon. All board/rack/bag/score/turn state lives in DO storage.
-- One DO per room, keyed by a short room code (e.g. 6 chars). Worker routes `/room/:code/ws` → that DO.
-- DO uses the **hibernatable WebSocket API**. DO persists to DO storage so rooms survive eviction.
-
-## Game rules (from physical edition — all tuneable via `config.ts`)
-
-### Board & setup
-- **Board:** 10×10 grid
-- **Rack:** 7 tiles per player; refill to 7 after each turn
-- **Max stack height:** 5 tiles
-- **First move:** word of length ≥ 2; must cover **at least 1 of the 4 central start squares** (the 2×2 center of the board, rows 4–5 / cols 4–5 in 0-indexed terms). Config: `firstMoveMustCoverCenter: true`.
-
-### Placing tiles
-- All tiles in a turn must be placed in **a single row or column** (across or down; never diagonally, never right-to-left or bottom-to-top).
-- After the first move, every play must build on or connect to existing tiles — every maximal run of ≥ 2 letters through a newly placed tile must be a valid word.
-- **Only 1 tile may be placed on any given cell per turn** — you cannot stack two tiles on the same cell in a single turn.
-
-### Stacking rules
-- May place on an empty cell or on top of an existing stack (if height < 5).
-- **Cannot place the same letter on top of itself** (no `A` on `A`).
-- **Cannot stack over an entire existing word in one turn** — at least 1 letter from the previous word must remain unmodified. You cannot change every tile of an existing word in a single play.
-
-### Trivial suffixes (plurals / past tense) — NOT auto-enforced (removed 2026-06-12)
-The physical rule disallows plays that only add a trivial **S/ES** (plural) or
-**D/ED** (past tense) to an existing word (CATS on CAT, JUMPED on JUMP). We do
-**not** try to detect this in code. A reliable heuristic is impossible without
-real morphology: the old positional check produced false positives (it rejected
-MAD because "MA" pre-existed, and SLID because "SLI" pre-existed, even though
-both are genuinely new words). **All word validity — including "is this just a
-trivial inflection?" — is now decided by human challenge, never by the engine.**
-
-The only thing the system flags is **informational, not a block**: if a word
-formed this turn was already played earlier in the game (it appears in
-`history`), the UI shows a small "↻ played before" note in the live preview and
-the turn-review popup. Repeating a word is legal; the note just surfaces it.
-
-### Scoring (critical — unit-test all cases)
-- For each word **formed or modified** this turn:
-  - If **all** tiles in the word are height 1: `2 × number of letters in the word`
-  - If the word contains **any** stacked tile (height ≥ 2): `1 × sum of heights of every tile in the word` (height includes all tiles underneath — a stack of 3 contributes 3 points for that cell)
-- Sum across all words formed/modified in the turn. A tile shared by two scored words is counted in each.
-
-### Bonus scoring
-- **Qu bonus:** if you use the Qu tile in a word where all tiles are height 1, score **+2 extra bonus points for that word**. The bonus applies per word — if Qu sits at the intersection of two flat words, both words get +2 (total +4). In any stacked combination, Qu is worth the usual 1 point per height with no bonus.
-- **Bingo bonus:** if you use **all 7 tiles from your rack in a single turn**, score **+20 extra bonus points**. Only triggers at exactly 7; using all tiles when you have fewer than 7 (near endgame) does not qualify.
-
-### Tile bag (confirmed from physical edition)
-100 tiles total, combined `Qu` tile (not separate Q):
-
-| Count | Letters |
-|-------|---------|
-| 8 | E |
-| 7 | A, I, O |
-| 6 | S |
-| 5 | D, L, M, N, R, T, U |
-| 4 | C |
-| 3 | B, F, G, H, P |
-| 2 | K, W, Y |
-| 1 | J, Qu, V, X, Z |
-
-Total: 8 + 21 + 6 + 35 + 4 + 15 + 6 + 5 = **100** ✓
-
-### Actions per turn (pick exactly one)
-- **Play:** place tiles, score words, refill rack to 7.
-- **Pass:** end turn without playing. Tactical — can open better opportunities.
-- **Exchange:** swap exactly **1 tile** — put your unwanted tile aside, draw a new one, return the unwanted tile to the bag. Turn ends. (Physical rules allow only 1 tile exchange, not multiple.)
-
-### Illegal words (from physical rulebook)
-The following are always invalid regardless of lexicon:
-- Proper nouns (names of places or people)
-- Hyphenated words
-- Words requiring an apostrophe
-- Abbreviations, acronyms, and symbols
-- Prefixes and suffixes that cannot stand alone
-- Foreign words unless they appear in the dictionary
-
-### Endgame
-The game ends when either:
-- A player uses all their tiles **and no tiles remain in the bag**, OR
-- All players pass consecutively (no one can form a word)
-
-After the game ends:
-- **Deduct 5 points** for each leftover tile on a player's rack (this is a physical-edition rule, not optional — default on, config flag `endgameTilePenalty: true`)
-- Highest total score wins
-
-### Qu tile string representation
-The Qu tile occupies one cell but represents two characters. When extracting a word string for D1 lookup or display, expand the Qu cell to `"qu"`. Example: Qu+E+E+N on 4 cells → lookup string `"queen"`. The D1 lexicon stores normal ASCII words (`queen`, `quest`, etc.) — no special entries needed. The board data model stores the tile value as `"qu"` (lowercase two-char string) to distinguish it from separate Q and U tiles.
-
-### Rack privacy
-The DO sends the full game state to every connected client. Each player's rack data reaches all browsers — the UI is responsible for hiding other players' racks and showing only tile counts for opponents. No server-side personalisation of the state payload is required.
-
-## Game engine (pure module — `worker/src/engine/`)
-
-- No I/O, no imports from Cloudflare runtime — fully unit-testable in Node/Vitest
-- `validatePlacement(board, placedTiles, rack, config)` → `{ ok: true } | { ok: false, reason: string }`
-  - Checks: single line, adjacency after first move, height ≤ 5, no same-letter-on-top, only 1 tile per cell per turn, cannot overwrite entire existing word
-- `extractWords(board, placedTiles)` → distinct horizontal + vertical runs of length ≥ 2 through newly placed/modified tiles, with per-tile heights
-- `scoreTurn(words, placedTiles, config)` → flat-vs-stacked rule + Qu bonus + bingo bonus
-- `endgamePenalty(leftoverTiles, config)` → −5/tile end-of-game penalty
-- The engine never judges word validity (no lexicon/D1 dependency) — validity is human-consensus via the challenge flow in the DO
-- Tests must cover: flat (2/letter) vs stacked (sum-of-heights), multi-word turns, shared tiles, illegal stacks, first-move center requirement, Qu bonus (including +4 at intersection), bingo bonus, endgame tile penalty, cannot-overwrite-entire-word rule
-
-## WebSocket message protocol
-
-**Client → Server:**
-- `join` / `leave`
-- `submit_move` — placed tiles; triggers placement validation then the post-submit popup
-- `challenge_word` — word index; in the open stage this opens the review/vote
-- `acknowledge_move` — open stage: accept the move (no challenge)
-- `vote_move` — review stage: `{ vote: "allow" | "reject" }` (is the word valid?)
-- `pass`
-- `swap_tiles` — 1 tile index to exchange
-- `define` — word + board coords; triggers MW lookup (popup "View definition" button)
-- `chat` (optional)
-
-**Server → Client:**
-- `state` — full snapshot (sent on connect and after every committed change)
-- `move_pending` — `{ words, tentativePoints, windowMs }` — opens the 30-second post-submit popup
-- `challenge_update` — `{ playerId, wordIndex }` — broadcast in real time when any player challenges a word
-- `challenge_result` — `{ challenged: [{word, by}] }` — which words were challenged and by whom; sent when window closes
-- `move_applied` — move committed, includes updated board + scores
-- `move_rejected` — the review vote rejected the move; player replays their turn
-- `definition_result` — MW response for a `define` request
-- `error`
-- `game_over` — `{ reason }` — game ended/canceled (e.g. host left)
-
-On reconnect, DO sends the full current `state` snapshot. If a post-submit popup is in progress, the snapshot includes the pending move, the current per-player accept/challenge state, and the rejoining player's remaining countdown so they can render the popup correctly.
-
-## Phases
-
-1. **Scaffold** — wrangler project, TS, Vite frontend, D1 + DO + Assets bindings, hello-world deploy
-2. **Lexicon pipeline** — build script, seed D1, `GET /validate?word=` test endpoint; show source + count + sample lookups
-3. **Engine** — pure module + unit tests (no network)
-4. **Durable Object room** — WebSocket protocol, wire in engine + D1 validity; 2-player game end to end
-5. **Frontend** — board/rack/play UI, room create/join, live sync
-6. **Define/Challenge** — Worker MW proxy (secret key, zero storage) + modal UI
-7. **Polish** — reconnection, endgame, swap/pass, edge cases, live deploy
-
-## Confirmed config
+## Key config (defaults; all tunable in [`config.ts`](worker/src/engine/config.ts))
 
 | Setting | Value |
 |---------|-------|
-| Board | 10×10 |
-| Stack height | 5 |
-| Rack size | 7 |
-| Players | 2–4 |
+| Board / stack / rack / players | 10×10 / max 5 / 7 / 2–4 |
 | Validation mode | `"challenge"` + `challengePenalty: false` |
-| Challenge resolution | Human consensus (no dictionary arbiter). Challenge → review/vote; move plays only if every non-submitter allows it; any "not valid" vote rejects it |
+| Challenge resolution | Human consensus (no dictionary arbiter); any "not valid" vote rejects the whole move |
 | Challenge window | 30s auto-accept in the open stage; a challenge pauses the timer and opens the vote |
-| Join | A non-empty name is required (no anonymous players); enforced client + server |
-| Host leaves | The game is canceled for everyone (`game_over`, end screen) |
-| Lexicon | SCOWL size 50–70 buckets |
-| Q tile | Combined `Qu` |
-| Tile distribution | Confirmed from physical edition (see table above) |
-| First move center | Required (4 central squares) |
-| Endgame tile penalty | 5 pts per leftover tile, default on |
+| First move | Length ≥ 2, must cover a center square |
+| Endgame tile penalty | −5 pts per leftover tile, default on |
 | Exchange | 1 tile only per turn |
-| UI target | **Mobile-first** — primarily accessed from mobile web browsers; design for small touch screens first, scale up to desktop |
+| Q tile | Combined `Qu` (stored as `"qu"`) |
+| Lexicon | SCOWL size 50–70 buckets (63,172 words seeded) |
+| Join | Non-empty name required (client + server); host leaving cancels the game |
+| UI target | **Mobile-first** — design for small touch screens, scale up to desktop |
 
-## D1 / Wrangler notes
+See [docs/game-rules.md](docs/game-rules.md) for full rules and the tile distribution.
 
-- D1 is SQLite — avoid Postgres-specific SQL
-- `wrangler.toml` is safe to commit (no secrets); secrets go via `wrangler secret put`
-- Always verify current Cloudflare docs for DO WebSocket hibernation, D1 bindings, and Workers Assets config — wrangler syntax evolves
+## Gotchas
+
+**Branding vs infra naming.** App is user-facing **Wordstack** (UI + custom domain
+`wordstack.aryaadarshagautam.com`); infra keeps the `upwords` name on purpose —
+Worker script, D1 `upwords-db`, the Room DO, `upwords:*` localStorage keys, the
+repo, and the `upwords.*.workers.dev` subdomain. **Don't rename these** — it would
+orphan DO storage and reset users.
+
+**Merriam-Webster compliance.** Never *persist* the MW response (no D1/DO/KV/file/
+log). A transient in-memory `defCache` in the DO (5-min TTL, lost on hibernation)
+is the only permitted exception. Full rule + rationale in
+[docs/architecture.md](docs/architecture.md).
+
+**D1 / Wrangler.** D1 is SQLite — avoid Postgres-specific SQL. `wrangler.toml` is
+safe to commit (no secrets); secrets go via `wrangler secret put`. Verify current
+Cloudflare docs for DO WebSocket hibernation, D1 bindings, and Workers Assets —
+wrangler syntax evolves.
+
+**DO alarms, never `setTimeout`.** A single DO alarm is multiplexed by phase
+(challenge window / turn auto-skip / storage cleanup); alarms survive hibernation.
 
 ## Cloudflare access
 
-Cloudflare API key is available as `$CLOUDFLARE_API_TOKEN` in the shell — pass it to wrangler or curl calls via that variable, never hard-code it.
+Cloudflare API key is available as `$CLOUDFLARE_API_TOKEN` in the
+shell — pass it to wrangler/curl via that variable, never hard-code it.
+
+## Build history (phases)
+
+1. Scaffold · 2. Lexicon pipeline · 3. Engine · 4. Durable Object room ·
+5. Frontend · 6. Define/Challenge (MW proxy) · 7. Polish (reconnection, endgame,
+swap/pass, edge cases, live deploy).
+
+All seven phases are **complete and deployed** at
+https://wordstack.aryaadarshagautam.com.
