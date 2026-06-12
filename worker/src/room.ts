@@ -69,6 +69,19 @@ export class Room {
       return Response.json({ ok: true });
     }
 
+    // Lightweight room probe (no game state mutated) — lets a client landing on a
+    // shared link decide whether to auto-enter (they're already a player) or show
+    // the join screen. `me` is the caller's stored playerId.
+    if (url.pathname.endsWith("/info")) {
+      const me = url.searchParams.get("me") ?? "";
+      const s = this.state;
+      return Response.json({
+        exists: !!s,
+        phase: s?.phase ?? null,
+        isPlayer: s ? s.players.some((p) => p.id === me) : false,
+      });
+    }
+
     // Cached MW definition lookup (shared by everyone in this room). The Worker's
     // /define route forwards here with an already-validated word.
     if (url.pathname.endsWith("/define")) {

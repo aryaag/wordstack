@@ -29,6 +29,24 @@ export async function createRoom(): Promise<string> {
   return (await res.json()).code as string;
 }
 
+export interface RoomInfo {
+  exists: boolean;
+  phase: "lobby" | "playing" | "pending" | "gameover" | null;
+  isPlayer: boolean; // is the given playerId already in this room?
+}
+
+/** GET /room/:code/info → probe whether a room exists and whether I'm a player,
+ *  so a shared link can auto-enter returning players without re-joining. */
+export async function fetchRoomInfo(code: string, playerId: string): Promise<RoomInfo> {
+  try {
+    const res = await fetch(`/room/${encodeURIComponent(code)}/info?me=${encodeURIComponent(playerId)}`);
+    if (!res.ok) return { exists: false, phase: null, isPlayer: false };
+    return (await res.json()) as RoomInfo;
+  } catch {
+    return { exists: false, phase: null, isPlayer: false };
+  }
+}
+
 /** GET /define → MW lookup. Passing the room code routes through that room's DO,
  *  which serves a short-TTL in-memory cache shared by everyone in the room. */
 export async function fetchDefinition(word: string, room?: string): Promise<DefineResult> {

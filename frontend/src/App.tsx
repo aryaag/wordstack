@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createRoom, getStoredName, setStoredName, useRoom } from "./useRoom";
+import { useEffect, useState } from "react";
+import { createRoom, fetchRoomInfo, getPlayerId, getStoredName, setStoredName, useRoom } from "./useRoom";
 import { Landing, Lobby } from "./Landing";
 import { Game } from "./Game";
 import { EndScreen, Reconnecting } from "./overlays";
@@ -14,11 +14,36 @@ function setRoomUrl(code: string | null) {
 }
 
 export function App() {
-  // `joined` = the room the player has actually committed to (drives the room view).
-  // A `?room=` link does NOT auto-join — it only pre-fills the code on the landing
-  // page, so the player can adjust their name and join themselves.
+  // `joined` = the room the player has committed to (drives the room view).
   const [joined, setJoined] = useState<string | null>(null);
   const [name, setName] = useState(getStoredName());
+  const [roomParam, setRoomParam] = useState<string | null>(roomFromUrl());
+  const [probing, setProbing] = useState<boolean>(!!roomParam);
+
+  // Landing on a shared link: if I'm ALREADY a player in this room, enter directly
+  // (reconnect to a game/lobby in progress). Otherwise fall through to the join
+  // screen with the code pre-filled. (No spectator mode — non-players just see the
+  // landing; joining an in-progress game is rejected server-side as before.)
+  useEffect(() => {
+    if (joined || !roomParam) {
+      setProbing(false);
+      return;
+    }
+    let alive = true;
+    setProbing(true);
+    fetchRoomInfo(roomParam, getPlayerId())
+      .then((info) => {
+        if (!alive) return;
+        if (info.exists && info.isPlayer) {
+          setRoomUrl(roomParam);
+          setJoined(roomParam);
+        }
+      })
+      .finally(() => alive && setProbing(false));
+    return () => {
+      alive = false;
+    };
+  }, [roomParam, joined]);
 
   const enter = (c: string) => {
     setStoredName(name.trim());
@@ -26,21 +51,33 @@ export function App() {
     setRoomUrl(code);
     setJoined(code);
   };
+  const goHome = () => {
+    setRoomUrl(null);
+    setRoomParam(null);
+    setJoined(null);
+  };
 
-  if (!joined) {
+  if (joined) return <RoomView code={joined} name={name.trim()} onLeave={goHome} />;
+  if (probing) {
     return (
       <div className="app">
-        <Landing
-          name={name}
-          setName={setName}
-          initialCode={roomFromUrl() ?? ""}
-          onHost={async () => enter(await createRoom())}
-          onJoin={enter}
-        />
+        <div className="panel">
+          <p className="muted">Loading game…</p>
+        </div>
       </div>
     );
   }
-  return <RoomView code={joined} name={name.trim()} onLeave={() => { setRoomUrl(null); setJoined(null); }} />;
+  return (
+    <div className="app">
+      <Landing
+        name={name}
+        setName={setName}
+        initialCode={roomParam ?? ""}
+        onHost={async () => enter(await createRoom())}
+        onJoin={enter}
+      />
+    </div>
+  );
 }
 
 function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {

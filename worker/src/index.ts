@@ -18,6 +18,7 @@ export interface Env {
 const ROOM_CODE = /^[A-Z0-9]{4,8}$/;
 
 const ROOM_WS = /^\/room\/([^/]+)\/ws$/;
+const ROOM_INFO = /^\/room\/([^/]+)\/info$/;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
 
 function generateCode(len = 6): string {
@@ -86,6 +87,15 @@ export default {
       const id = env.ROOM.idFromName(code);
       await env.ROOM.get(id).fetch(new Request(`https://do/init?code=${code}`, { method: "POST" }));
       return Response.json({ code });
+    }
+
+    // /room/:code/info — read-only probe (does this room exist / am I a player?).
+    const probe = ROOM_INFO.exec(url.pathname);
+    if (probe) {
+      const code = probe[1].toUpperCase();
+      const me = encodeURIComponent(url.searchParams.get("me") ?? "");
+      const id = env.ROOM.idFromName(code);
+      return env.ROOM.get(id).fetch(new Request(`https://do/info?me=${me}`));
     }
 
     // /room/:code/ws — route the WebSocket to that room's Durable Object.
