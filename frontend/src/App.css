@@ -395,6 +395,16 @@ svg {
   background: var(--info-bg);
   box-shadow: inset 0 0 0 1px var(--info-line);
 }
+.tray-turn {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  margin-bottom: 2px;
+}
+.tray.active .tray-turn {
+  color: var(--info-fg);
+}
 .rack {
   display: flex;
   gap: 5px;
@@ -1182,12 +1192,38 @@ svg {
 }
 .game-main {
   padding: 14px;
+  min-width: 0;
 }
-/* On wide screens the game stays a single centered column (history lives behind
-   the strip's history icon), just a touch wider so the board has more room. */
-@media (min-width: 760px) {
+.game-side {
+  display: none;
+  padding: 14px;
+  flex-direction: column;
+  gap: 12px;
+}
+/* Wide screens (iPad / desktop): fill the space with a two-column layout — board
+   on the left, an always-visible move-history panel on the right. The strip's
+   history button is for narrow screens only, so hide it here. */
+@media (min-width: 768px) {
   .app-game {
-    max-width: 560px;
+    max-width: min(1180px, 94vw);
+  }
+  .game-body {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .game-main {
+    flex: 1.5;
+  }
+  .game-side {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    position: sticky;
+    top: 14px;
+  }
+  .hist-btn {
+    display: none;
   }
 }
 

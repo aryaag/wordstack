@@ -9,7 +9,7 @@ import {
 import type { RoomConn } from "./useRoom";
 import { playPlace } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
-import { ConfirmLeave, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
+import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
 
 interface Staged {
@@ -273,6 +273,10 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           )}
 
           <div className={`tray${isMyTurn ? " active" : ""}`}>
+            <div className="tray-turn">
+              {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
+              {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
+            </div>
             <div className="rack" data-rack>
               {order.map((i) => (
                 <Tile
@@ -339,6 +343,10 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             )}
           </div>
         </div>
+
+        <aside className="game-side">
+          <GameInfo state={state} me={me} showPlayers={false} />
+        </aside>
       </div>
 
       {phase === "pending" && state.pending && (
