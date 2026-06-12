@@ -8,6 +8,40 @@ import type { DefineResult } from "./protocol";
 
 const MW_BASE = "https://www.dictionaryapi.com/api/v3/references/collegiate/json";
 
+/** Collect MW status/subject labels (`sls`) and general labels (`lbs`) — e.g.
+ *  "informal", "US slang", "chiefly British". These live at the entry top level
+ *  and nested inside the `def` sense structure, but never in `shortdef`, so we
+ *  gather them separately. Returns a deduped, order-preserving, capped list. */
+function collectLabels(entry: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (Array.isArray(v)) for (const s of v) if (typeof s === "string" && s.trim()) out.push(s.trim());
+  };
+  push(entry.lbs);
+  push(entry.sls);
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n);
+    } else if (node && typeof node === "object") {
+      const o = node as Record<string, unknown>;
+      push(o.sls);
+      push(o.lbs);
+      for (const k of Object.keys(o)) if (k !== "sls" && k !== "lbs") walk(o[k]);
+    }
+  };
+  walk(entry.def); // sense-level labels live under def → sseq → sense
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const s of out) {
+    const key = s.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(s);
+    }
+  }
+  return deduped.slice(0, 4);
+}
+
 /** Parse the raw MW array into a minimal shape. Real entries are objects with
  *  `shortdef` (string[]) + `fl`; a not-found word yields an array of plain
  *  suggestion strings. The raw payload is never returned or stored. */
@@ -16,13 +50,14 @@ export function parseMW(data: unknown, word: string): DefineResult {
   if (typeof data[0] === "string") {
     return { word, found: false, suggestions: (data as string[]).slice(0, 6) };
   }
-  const entries: { fl: string; defs: string[] }[] = [];
+  const entries: { fl: string; labels: string[]; defs: string[] }[] = [];
   for (const e of data) {
     if (e && typeof e === "object") {
       const sd = (e as { shortdef?: unknown }).shortdef;
       if (Array.isArray(sd) && sd.length) {
         entries.push({
           fl: typeof (e as { fl?: unknown }).fl === "string" ? (e as { fl: string }).fl : "",
+          labels: collectLabels(e as Record<string, unknown>),
           defs: (sd as unknown[]).filter((s): s is string => typeof s === "string").slice(0, 3),
         });
       }

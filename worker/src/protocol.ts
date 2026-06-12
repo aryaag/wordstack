@@ -86,7 +86,8 @@ export type PublicState = Omit<GameState, "bag" | "seed"> & { bagCount: number }
 /** Minimal, parsed Merriam-Webster lookup result returned by GET /define.
  *  The raw MW payload is parsed in the Worker and discarded — never stored. */
 export interface DefineEntry {
-  fl: string; // part of speech (e.g. "noun")
+  fl: string; // part of speech / functional label (e.g. "noun", "abbreviation")
+  labels: string[]; // status/subject labels from MW (e.g. "informal", "US slang")
   defs: string[]; // 1–3 shortdef strings
 }
 export type DefineResult =

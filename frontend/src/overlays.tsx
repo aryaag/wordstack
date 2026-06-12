@@ -356,7 +356,16 @@ function DefineModal({ word, room, onClose }: { word: string; room?: string; onC
           ) : res && res.found ? (
             res.entries.map((e, i) => (
               <div key={i} className="def-entry">
-                {e.fl && <span className="def-fl">{e.fl}</span>}
+                {(e.fl || e.labels.length > 0) && (
+                  <div className="def-tags">
+                    {e.fl && <span className="def-fl">{e.fl}</span>}
+                    {e.labels.map((l, k) => (
+                      <span key={k} className="def-label">
+                        {l}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <ol className="def-list">
                   {e.defs.map((d, j) => (
                     <li key={j}>{d}</li>
