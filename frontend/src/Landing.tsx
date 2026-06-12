@@ -112,7 +112,7 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
     <>
       <div className="appbar">
         <span className="brand">
-          <span className="mini">W</span> Wordstack
+          <span className="mini">W</span> WordStack
         </span>
         <button
           className="icon-btn"
