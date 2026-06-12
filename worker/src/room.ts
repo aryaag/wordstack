@@ -28,6 +28,7 @@ const WINDOW_MS = 30_000; // open stage: auto-accept countdown
 const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
 const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
 const SKIP_MS = 120_000; // auto-skip a disconnected current player's turn after this
+const MAX_REJECTS_PER_TURN = 2; // after this many upheld challenges in a turn, skip the player
 const CLEANUP_MS = 24 * 60 * 60_000; // delete a finished/abandoned room's storage after this
 const LOBBY_TTL_MS = 6 * 60 * 60_000; // delete a created-but-never-started lobby after this
 const CLEANUP_RECHECK_MS = 60 * 60_000; // if someone's still connected at cleanup time, recheck in 1h
@@ -230,6 +231,7 @@ export class Room {
     s.phase = "playing";
     s.turnSeat = Math.floor(Math.random() * s.players.length); // randomize who goes first
     s.turnStartedAt = Date.now();
+    s.rejectsThisTurn = 0;
     s.consecutivePasses = 0;
     await this.armTurnTimer(s);
     await this.persistAndBroadcast();
@@ -268,6 +270,7 @@ export class Room {
     s.phase = "playing";
     s.turnSeat = Math.floor(Math.random() * s.players.length);
     s.turnStartedAt = Date.now();
+    s.rejectsThisTurn = 0;
     s.consecutivePasses = 0;
     s.pending = null;
     s.draft = null;
@@ -544,16 +547,27 @@ export class Room {
     const s = this.state!;
     const pending = s.pending!;
     await this.ctx.storage.deleteAlarm();
+    const submitter = s.players.find((p) => p.id === pending.submitterId);
     const byWord = new Map<number, string[]>();
     for (const [pid, indices] of Object.entries(pending.challenges)) {
       for (const i of indices) byWord.set(i, [...(byWord.get(i) ?? []), pid]);
     }
     const challenged = [...byWord.entries()].map(([i, by]) => ({ word: pending.words[i].word, by }));
     this.broadcast({ type: "challenge_result", challenged });
-    this.broadcast({ type: "move_rejected", reason: "the table did not accept the word — replay your turn" });
+    s.rejectsThisTurn++;
     s.pending = null;
     s.draft = null;
-    s.phase = "playing"; // board/rack untouched; same player's turn (replay)
+    s.phase = "playing"; // board/rack untouched
+    if (s.rejectsThisTurn >= MAX_REJECTS_PER_TURN) {
+      // Two upheld challenges this turn → the player forfeits the rest of it.
+      this.broadcast({
+        type: "move_rejected",
+        reason: `Challenged twice — ${submitter?.name ?? "that player"}'s turn is skipped`,
+      });
+      this.rotateTurn(s); // advances the turn and resets rejectsThisTurn
+    } else {
+      this.broadcast({ type: "move_rejected", reason: "the table did not accept the word — replay your turn" });
+    }
     await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
@@ -632,6 +646,7 @@ export class Room {
       if (!s.players[seat].left) {
         s.turnSeat = seat;
         s.turnStartedAt = Date.now();
+        s.rejectsThisTurn = 0;
         return;
       }
     }
@@ -734,6 +749,7 @@ function freshLobby(code: string): GameState {
     seed: 0,
     turnSeat: 0,
     turnStartedAt: 0,
+    rejectsThisTurn: 0,
     consecutivePasses: 0,
     pending: null,
     history: [],

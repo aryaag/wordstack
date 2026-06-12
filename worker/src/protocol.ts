@@ -57,6 +57,8 @@ export interface GameState {
   turnSeat: number;
   /** Epoch ms when the current turn began — drives the soft turn-timer ring. */
   turnStartedAt: number;
+  /** Upheld challenges against the current player this turn — at 2 they're skipped. */
+  rejectsThisTurn: number;
   consecutivePasses: number;
   pending: PendingMove | null;
   history: TurnRecord[];

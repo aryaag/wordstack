@@ -45,6 +45,16 @@ unvoted = allow):
   and replays. The DO broadcasts `challenge_result` then `move_rejected`. No D1
   check, no turn skip for the challenger.
 
+**Two upheld challenges → skip (added 2026-06-12).** The DO counts upheld
+rejections against the current player this turn (`rejectsThisTurn` in GameState,
+reset on every turn change). On the **2nd** upheld rejection in the same turn
+(`MAX_REJECTS_PER_TURN = 2`), the player forfeits the rest of their turn: instead
+of replaying again, the DO rotates the turn to the next player and broadcasts
+`move_rejected` with a "Challenged twice — NAME's turn is skipped" reason. The
+rack is untouched (no tiles were committed) and it is **not** counted as a pass
+(no effect on the all-pass endgame). Applies in 2-player (where a lone challenge
+auto-rejects) and 3–4 player games alike.
+
 **Single opponent (2 players, or 3–4 with only one active non-submitter left):**
 there's no one else to deliberate with, so a challenge resolves immediately — the
 lone challenger's No stands, resolved inline without broadcasting the review stage
