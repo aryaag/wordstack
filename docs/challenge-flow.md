@@ -33,8 +33,10 @@ prevents a permanent hang), the table deliberates out loud, and every
 non-submitter casts a **vote on the word's validity** — framed as *"Is WORD a
 valid word? Yes (valid) / No (not valid)"*, explicitly **not** a vote on whether
 the challenge was fair. One clarifying sentence sits directly above the Yes/No
-buttons. The challenge itself counts as the challenger's **No** vote (they may
-switch to Yes to withdraw).
+buttons. **Everyone — the challenger included — starts NEUTRAL** (no vote
+pre-selected) so the table can deliberate and change their minds; the act of
+challenging is not pre-locked to "not valid". Resolution waits until every
+non-submitter has actually voted (or the backstop fires).
 
 **Resolution** (when all non-submitters have voted, or the backstop fires with
 unvoted = allow):
@@ -43,9 +45,10 @@ unvoted = allow):
   and replays. The DO broadcasts `challenge_result` then `move_rejected`. No D1
   check, no turn skip for the challenger.
 
-**Two players:** there's no one else to deliberate with, so a challenge resolves
-immediately — the lone challenger's No stands, resolved inline without
-broadcasting the review stage (no vote-popup flash).
+**Single opponent (2 players, or 3–4 with only one active non-submitter left):**
+there's no one else to deliberate with, so a challenge resolves immediately — the
+lone challenger's No stands, resolved inline without broadcasting the review stage
+(no vote-popup flash).
 
 A move is always accepted or rejected **as a unit** — no partial acceptance. The
 **View definition** action (Merriam-Webster lookup; see

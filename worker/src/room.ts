@@ -309,20 +309,23 @@ export class Room {
       return this.send(ws, { type: "error", message: "bad word index" });
     }
     (pending.challenges[pid] ??= []).push(wordIndex);
-    // Enter review: pause the auto-accept timer; the challenge counts as the
-    // challenger's "not valid" vote. Everyone else now votes on the word.
+    // Enter review: pause the auto-accept timer. Everyone — including the
+    // challenger — starts with a NEUTRAL vote so the table can deliberate and
+    // change their minds; resolution waits until every non-submitter has voted
+    // (or the backstop fires). The challenger is not pre-locked to "not valid".
     pending.stage = "review";
     pending.challengerId = pid;
-    pending.votes = { [pid]: "reject" };
+    pending.votes = {};
     pending.deadline = Date.now() + REVIEW_BACKSTOP_MS;
     await this.ctx.storage.setAlarm(pending.deadline);
     this.broadcast({ type: "challenge_update", playerId: pid, wordIndex });
-    // With a single opponent there's no one else to deliberate with, so the
-    // challenge resolves the move immediately (the lone "not valid" stands) —
-    // skip showing the voting UI. With 3–4 players, broadcast the review state
-    // so the others can vote.
+    // With a single opponent (the challenger themselves) there's no one else to
+    // deliberate with, so the challenge resolves the move immediately as a
+    // rejection — skip the voting UI. With 3–4 players, broadcast the review
+    // state so everyone, the challenger included, can vote and reconsider.
     const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
-    if (others.every((p) => pending.votes[p.id] !== undefined)) {
+    if (others.length <= 1) {
+      pending.votes[pid] = "reject"; // lone challenger's "not valid" stands
       await this.finishReview();
     } else {
       await this.persistAndBroadcast();

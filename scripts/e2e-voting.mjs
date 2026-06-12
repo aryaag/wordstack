@@ -83,44 +83,71 @@ async function main() {
   await A.waitFrom(mA, stateWith((g) => g.phase === "playing"), "playing");
   let game = A.latest();
 
-  // A plays two tiles across the center.
-  const aR = rackOf(game, "A");
-  let mp = B.mark();
-  A.send({ type: "submit_move", placed: [{ row: 4, col: 4, letter: aR[0] }, { row: 4, col: 5, letter: aR[1] }] });
-  await B.waitFrom(mp, isType("move_pending"), "B sees pending");
+  // Roles are derived from turnSeat (the starting player is randomized), not
+  // hardcoded: S = current submitter, V1 = challenger, V2 = the other voter.
+  const byId = { A, B, C };
+  const roles = (g) => {
+    const sId = g.players[g.turnSeat].id;
+    const others = g.players.filter((p) => p.id !== sId).map((p) => p.id);
+    return { S: byId[sId], V1: byId[others[0]], V2: byId[others[1]], sId, c1: others[0], c2: others[1] };
+  };
 
-  // B challenges → must enter review (NOT resolve immediately with 3 players).
-  let mr = C.mark();
-  B.send({ type: "challenge_word", wordIndex: 0 });
-  await C.waitFrom(mr, stateWith((g) => g.pending && g.pending.stage === "review"), "entered review");
-  game = C.latest();
+  // ── Allow path (the regression case for the premature-resolution bug) ──
+  let { S, V1, V2, sId, c1, c2 } = roles(game);
+  const sR = rackOf(game, sId);
+  let mp = V1.mark();
+  S.send({ type: "submit_move", placed: [{ row: 4, col: 4, letter: sR[0] }, { row: 4, col: 5, letter: sR[1] }] });
+  await V1.waitFrom(mp, isType("move_pending"), "challenger sees pending");
+
+  // V1 challenges → must enter review (NOT resolve immediately with 3 players).
+  let mr = V2.mark();
+  V1.send({ type: "challenge_word", wordIndex: 0 });
+  await V2.waitFrom(mr, stateWith((g) => g.pending && g.pending.stage === "review"), "entered review");
+  game = V2.latest();
   assert(game.phase === "pending" && game.pending.stage === "review", "challenge opens review, not instant reject");
-  assert(game.pending.challengerId === "B", "challenger recorded as B");
+  assert(game.pending.challengerId === c1, "challenger recorded");
 
-  // Allow path: B withdraws (allow) and C allows → unanimous allow → move plays.
-  const mApplied = A.mark();
-  B.send({ type: "vote_move", vote: "allow" });
-  C.send({ type: "vote_move", vote: "allow" });
-  await A.waitFrom(mApplied, isType("move_applied"), "unanimous allow → move_applied");
-  await A.waitFrom(mApplied, stateWith((g) => g.phase === "playing" && g.turnSeat === 1), "turn → B");
-  ok("allow path: word played");
+  // Regression guard: the challenger must start NEUTRAL (not pre-locked to reject).
+  assert(game.pending.votes[c1] === undefined, "challenger starts with NO pre-set vote (neutral)");
 
-  // Reject path: B (seat 1) plays; C challenges; A allows but C upholds → rejected.
-  game = B.latest();
-  const bR = rackOf(game, "B");
-  const bTile = bR.find((t) => t !== "s" && t !== "d") ?? bR[0];
-  mp = C.mark();
-  B.send({ type: "submit_move", placed: [{ row: 4, col: 6, letter: bTile }] });
-  await C.waitFrom(mp, isType("move_pending"), "C sees B's pending");
-  mr = A.mark();
-  C.send({ type: "challenge_word", wordIndex: 0 });
-  await A.waitFrom(mr, stateWith((g) => g.pending && g.pending.stage === "review"), "review again");
-  const mRej = B.mark();
-  A.send({ type: "vote_move", vote: "allow" }); // A is fine
-  // C keeps its implicit reject (from challenging) → not unanimous allow.
-  await B.waitFrom(mRej, isType("move_rejected"), "one reject → move_rejected");
-  game = B.latest();
-  assert(game.turnSeat === 1, "still B's turn after rejection (replay)");
+  // The OTHER non-submitter votes allow FIRST. This must NOT resolve the move —
+  // the challenger hasn't voted yet. (The old bug: the challenger's pre-set reject
+  // made this resolve instantly as a rejection the moment the other voter clicked.)
+  let mC = V2.mark();
+  V2.send({ type: "vote_move", vote: "allow" });
+  await V2.waitFrom(mC, stateWith((g) => g.pending?.votes[c2] === "allow"), "other voter's allow recorded");
+  game = V2.latest();
+  assert(
+    game.phase === "pending" && game.pending.stage === "review",
+    "still under review after only one voter — challenger can still change mind",
+  );
+
+  // Now the challenger reconsiders and allows → unanimous allow → move plays.
+  const startSeat = game.turnSeat;
+  const mApplied = S.mark();
+  V1.send({ type: "vote_move", vote: "allow" });
+  await S.waitFrom(mApplied, isType("move_applied"), "unanimous allow → move_applied");
+  await S.waitFrom(mApplied, stateWith((g) => g.phase === "playing" && g.turnSeat === (startSeat + 1) % 3), "turn advances");
+  ok("allow path: challenger changed mind, word played");
+
+  // ── Reject path: new submitter plays; a challenger upholds → rejected ──
+  game = S.latest();
+  ({ S, V1, V2, sId, c1, c2 } = roles(game));
+  const seat2 = game.turnSeat;
+  const s2R = rackOf(game, sId);
+  const tile = s2R.find((t) => t !== "s" && t !== "d") ?? s2R[0];
+  mp = V1.mark();
+  S.send({ type: "submit_move", placed: [{ row: 4, col: 6, letter: tile }] });
+  await V1.waitFrom(mp, isType("move_pending"), "challenger sees pending (round 2)");
+  mr = V2.mark();
+  V1.send({ type: "challenge_word", wordIndex: 0 });
+  await V2.waitFrom(mr, stateWith((g) => g.pending && g.pending.stage === "review"), "review again");
+  const mRej = S.mark();
+  V2.send({ type: "vote_move", vote: "allow" }); // the other voter is fine
+  V1.send({ type: "vote_move", vote: "reject" }); // challenger must now explicitly uphold (no implicit reject)
+  await S.waitFrom(mRej, isType("move_rejected"), "one reject → move_rejected");
+  game = S.latest();
+  assert(game.turnSeat === seat2, "still submitter's turn after rejection (replay)");
   ok("reject path: word sent back");
 
   console.log(`\n✅ ALL ${passed} CHECKS PASSED`);
