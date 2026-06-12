@@ -10,7 +10,7 @@ import type { RoomConn } from "./useRoom";
 import { playPlace } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
-import { AVATAR_COLORS, displayLetter, Icon, initials, playedWords, Tile } from "./lib";
+import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, playedWords, Tile } from "./lib";
 
 interface Staged {
   letter: string;
@@ -276,7 +276,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                 className="avatar"
                 style={{ width: 26, height: 26, fontSize: 11, background: curCol.bg, color: curCol.fg }}
               >
-                {initials(current?.name ?? "?")}
+                {avatarLabel(current?.name ?? "?", state.players.map((p) => p.name))}
               </span>
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
               {current && !current.connected && phase === "playing" && (

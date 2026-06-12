@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
-import { AVATAR_COLORS, displayLetter, Icon, initials, playedWords, Tile, TimerRing } from "./lib";
+import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, playedWords, Tile, TimerRing } from "./lib";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
 const colorOf = (p?: PlayerState) => (p ? AVATAR_COLORS[p.seat % 4] : FALLBACK);
@@ -18,9 +18,16 @@ const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s"
 // ── Compact player strip (avatar circles + score + turn ring), always on top ──
 export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
   const current = state.players[state.turnSeat];
+  const names = state.players.map((p) => p.name);
+  // During play, order the circles by turn order starting from whoever plays
+  // next (leftmost), so you can read off who's still to come this round.
+  const inPlay = state.phase === "playing" || state.phase === "pending";
+  const ordered = inPlay
+    ? [...state.players.slice(state.turnSeat), ...state.players.slice(0, state.turnSeat)]
+    : state.players;
   return (
     <div className="pstrip">
-      {state.players.map((p) => {
+      {ordered.map((p) => {
         const col = colorOf(p);
         const isCurrent = p.id === current?.id && state.phase !== "gameover";
         return (
@@ -30,7 +37,7 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
             title={p.left ? `${p.name} (left)` : p.name}
           >
             <span className="av" style={{ background: col.bg, color: col.fg }}>
-              {initials(p.name)}
+              {avatarLabel(p.name, names)}
             </span>
             <span className="pscore-mini">
               {p.score}
@@ -39,6 +46,9 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
           </div>
         );
       })}
+      <span className="turn-count" title="Turns played this game">
+        <Icon name="history" size={13} /> {state.history.length}
+      </span>
     </div>
   );
 }
@@ -46,6 +56,7 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
 // ── Players scoreboard + move history (side panel on wide; drawer on mobile) ──
 export function GameInfo({ state, me, showPlayers = true }: { state: PublicState; me: string; showPlayers?: boolean }) {
   const current = state.players[state.turnSeat];
+  const names = state.players.map((p) => p.name);
   const ranked = [...state.players].sort((a, b) => b.score - a.score);
   return (
     <>
@@ -60,7 +71,7 @@ export function GameInfo({ state, me, showPlayers = true }: { state: PublicState
             return (
               <div key={p.id} className={`prow${p.id === me ? " you" : ""}${p.left ? " gone" : ""}`}>
                 <span className="av" style={{ background: col.bg, color: col.fg }}>
-                  {initials(p.name)}
+                  {avatarLabel(p.name, names)}
                 </span>
                 <span className="pn">
                   {p.name}
@@ -248,7 +259,7 @@ export function TurnReview({
       <div className="modal">
         <div className="modal-head">
           <span className="avatar" style={{ background: col.bg, color: col.fg }}>
-            {initials(submitter?.name ?? "?")}
+            {avatarLabel(submitter?.name ?? "?", state.players.map((p) => p.name))}
           </span>
           <div>
             <p className="t">{isSubmitter ? "You submitted your turn" : `${submitter?.name} completed their turn`}</p>
@@ -544,7 +555,7 @@ export function HistoryPanel({
               return (
                 <div key={recs.length - i} className="turn">
                   <div className="avatar" style={{ background: col.bg, color: col.fg }}>
-                    {initials(rec.name)}
+                    {avatarLabel(rec.name, players.map((pl) => pl.name))}
                   </div>
                   <div className="body">
                     <div className="line1">

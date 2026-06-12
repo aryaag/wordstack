@@ -1213,10 +1213,20 @@ svg {
 /* ── Compact player strip (always-on-top avatar circles) ──────────────── */
 .pstrip {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
+  align-items: center;
   gap: 16px;
-  padding: 10px 12px 0;
+  padding: 10px 14px 0;
   flex-wrap: wrap;
+}
+.turn-count {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
 }
 .pcell {
   display: flex;

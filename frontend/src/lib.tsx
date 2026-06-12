@@ -27,6 +27,32 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .toUpperCase() || "?";
 
+/** Avatar label for a player, disambiguated against the rest of the roster.
+ *  Multi-word names use the first letter of the first two words (Red Two → RT).
+ *  Single-word names normally use just the first letter, but when two players
+ *  share it we extend to the first letter + the first character that tells the
+ *  colliding names apart (Gary/George → GA/GE; Hank/Hal → HN/HL). */
+export function avatarLabel(name: string, roster: string[] = []): string {
+  const clean = name.trim();
+  if (!clean) return "?";
+  const tokens = clean.split(/\s+/);
+  if (tokens.length > 1) return (tokens[0][0] + tokens[1][0]).toUpperCase();
+
+  const first = clean[0].toUpperCase();
+  const peers = roster
+    .map((n) => n.trim())
+    .filter((n) => n && !/\s/.test(n) && n[0].toUpperCase() === first);
+  if (peers.length <= 1) return first; // no collision → single letter
+
+  // First position (≥1) where the colliding names don't all share a character.
+  const maxLen = Math.max(...peers.map((n) => n.length));
+  let k = 1;
+  for (; k < maxLen; k++) {
+    if (new Set(peers.map((n) => (n[k] ?? "").toLowerCase())).size > 1) break;
+  }
+  return clean[k] ? first + clean[k].toUpperCase() : first;
+}
+
 export function Tile({
   letter,
   height = 1,
