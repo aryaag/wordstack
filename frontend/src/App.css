@@ -262,7 +262,6 @@ svg {
   background: var(--bg-board);
   border-radius: var(--r-md);
   width: 100%;
-  max-width: 520px;
   margin: 0 auto;
   container-type: inline-size;
 }
@@ -390,6 +389,11 @@ svg {
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+/* On your turn the rack picks up the same blue accent as the active player. */
+.tray.active {
+  background: var(--info-bg);
+  box-shadow: inset 0 0 0 1px var(--info-line);
 }
 .rack {
   display: flex;
@@ -1179,34 +1183,11 @@ svg {
 .game-main {
   padding: 14px;
 }
-.game-side {
-  display: none;
-  padding: 14px;
-  flex-direction: column;
-  gap: 12px;
-}
-.menu-btn {
-  display: inline-flex;
-}
+/* On wide screens the game stays a single centered column (history lives behind
+   the strip's history icon), just a touch wider so the board has more room. */
 @media (min-width: 760px) {
   .app-game {
-    max-width: 1000px;
-  }
-  .game-body {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-  .game-main {
-    flex: 1.5;
-    min-width: 0;
-  }
-  .game-side {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-  }
-  .menu-btn {
-    display: none;
+    max-width: 560px;
   }
 }
 
@@ -1219,14 +1200,20 @@ svg {
   padding: 10px 14px 0;
   flex-wrap: wrap;
 }
-.turn-count {
+.strip-right {
   margin-left: auto;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+}
+.bag-count {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-faint);
+  white-space: nowrap;
+}
+.hist-btn {
+  color: var(--text-soft);
 }
 .pcell {
   display: flex;

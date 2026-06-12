@@ -16,7 +16,7 @@ export interface InspectLayer {
 const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
 
 // ── Compact player strip (avatar circles + score + turn ring), always on top ──
-export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
+export function PlayerStrip({ state, me, onHistory }: { state: PublicState; me: string; onHistory: () => void }) {
   const current = state.players[state.turnSeat];
   const names = state.players.map((p) => p.name);
   // During play, order the circles by turn order starting from whoever plays
@@ -46,9 +46,14 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
           </div>
         );
       })}
-      <span className="turn-count" title="Turns played this game">
-        <Icon name="history" size={13} /> {state.history.length}
-      </span>
+      <div className="strip-right">
+        <span className="bag-count" title="Tiles left in the bag">
+          {state.bagCount} left
+        </span>
+        <button className="icon-btn hist-btn" onClick={onHistory} aria-label="Move history">
+          <Icon name="history" size={19} />
+        </button>
+      </div>
     </div>
   );
 }

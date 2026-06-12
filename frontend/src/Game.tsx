@@ -9,8 +9,8 @@ import {
 import type { RoomConn } from "./useRoom";
 import { playPlace } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
-import { ConfirmLeave, GameInfo, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
-import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, playedWords, Tile } from "./lib";
+import { ConfirmLeave, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
+import { displayLetter, Icon, playedWords, Tile } from "./lib";
 
 interface Staged {
   letter: string;
@@ -32,7 +32,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [selected, setSelected] = useState<number | null>(null);
   const [order, setOrder] = useState<number[]>([]);
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [ghost, setGhost] = useState<DragGhost | null>(null);
@@ -239,8 +239,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(null);
   };
 
-  const curCol = AVATAR_COLORS[(current?.seat ?? 0) % 4];
-
   return (
     <>
       <div className="appbar">
@@ -248,9 +246,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           <span className="mini">W</span> WordStack
         </span>
         <span className="right">
-          <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)} aria-label="Players & history">
-            <Icon name="menu" size={20} />
-          </button>
           <span className="room">{state.code}</span>
           <button className="icon-btn" onClick={() => setConfirmLeave(true)} aria-label="Leave">
             <Icon name="leave" size={19} />
@@ -258,7 +253,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         </span>
       </div>
 
-      <PlayerStrip state={state} me={me} />
+      <PlayerStrip state={state} me={me} onHistory={() => setHistoryOpen(true)} />
 
       <div className="game-body">
         <div className="game-main">
@@ -270,22 +265,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             onTilePointerDown={isMyTurn ? (key, e) => beginDrag({ kind: "cell", key }, overlay.get(key)!, e) : undefined}
           />
 
-          <div className={`banner${isMyTurn ? "" : " muted-banner"}`}>
-            <span className="who">
-              <span
-                className="avatar"
-                style={{ width: 26, height: 26, fontSize: 11, background: curCol.bg, color: curCol.fg }}
-              >
-                {avatarLabel(current?.name ?? "?", state.players.map((p) => p.name))}
-              </span>
-              {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
-              {current && !current.connected && phase === "playing" && (
-                <span className="away-hint"> · reconnecting, auto-skip soon</span>
-              )}
-            </span>
-            <span>{state.bagCount} tiles left</span>
-          </div>
-
           {isMyTurn && (
             <div className={`preview${preview?.bad ? " bad" : ""}`}>
               {preview?.text}
@@ -293,7 +272,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             </div>
           )}
 
-          <div className="tray">
+          <div className={`tray${isMyTurn ? " active" : ""}`}>
             <div className="rack" data-rack>
               {order.map((i) => (
                 <Tile
@@ -360,10 +339,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             )}
           </div>
         </div>
-
-        <aside className="game-side">
-          <GameInfo state={state} me={me} showPlayers={false} />
-        </aside>
       </div>
 
       {phase === "pending" && state.pending && (
@@ -376,15 +351,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         />
       )}
       {inspect && <StackInspector layers={inspect} players={state.players} onClose={() => setInspect(null)} />}
-      {menuOpen && (
-        <div className="scrim bottom" onClick={() => setMenuOpen(false)}>
-          <div className="sheet open" onClick={(e) => e.stopPropagation()}>
-            <div className="grip" />
-            <div className="menu-body">
-              <GameInfo state={state} me={me} />
-            </div>
-          </div>
-        </div>
+      {historyOpen && (
+        <HistoryPanel history={state.history} players={state.players} onClose={() => setHistoryOpen(false)} />
       )}
       {confirmLeave && (
         <ConfirmLeave
