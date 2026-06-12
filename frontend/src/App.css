@@ -411,15 +411,16 @@ svg {
 }
 .rack {
   display: flex;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 6px;
   width: 100%;
 }
-/* 10 equal slots that shrink to fit any width (a few stay empty for spacing);
-   tiles fill their slot and scale their letter to the slot width. */
+/* Mobile: exactly 7 equal slots per row, so the 10 slots wrap to a tidy 7 + 3
+   (filled and empty slots are identical in size). Wide screens override this to
+   a single non-wrapping row (see the min-width:768px block). Tiles fill their
+   slot and scale their letter to the slot width. */
 .rack-slot {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 46px;
+  flex: 0 0 calc((100% - 36px) / 7);
   aspect-ratio: 1 / 1;
   container-type: inline-size;
 }
@@ -1235,6 +1236,15 @@ svg {
   }
   .hist-btn {
     display: none;
+  }
+  /* Wide: a single row of all 10 slots, shrinking to fit the column. */
+  .rack {
+    flex-wrap: nowrap;
+  }
+  .rack-slot {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 48px;
   }
 }
 
