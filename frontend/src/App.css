@@ -385,22 +385,26 @@ svg {
   border-radius: var(--r-lg);
   background: var(--bg-soft);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 9px;
 }
-/* On your turn the rack picks up the same blue accent as the active player. */
+/* On your turn the rack keeps the beige fill but gets a slow blinking border. */
 .tray.active {
-  background: var(--info-bg);
-  box-shadow: inset 0 0 0 1px var(--info-line);
+  animation: rack-pulse 1.9s ease-in-out infinite;
+}
+@keyframes rack-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1.5px rgba(12, 68, 124, 0.1);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1.5px rgba(12, 68, 124, 0.6);
+  }
 }
 .tray-turn {
-  width: 100%;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-soft);
-  margin-bottom: 2px;
 }
 .tray.active .tray-turn {
   color: var(--info-fg);
@@ -408,26 +412,33 @@ svg {
 .rack {
   display: flex;
   gap: 5px;
+  width: 100%;
 }
-.rack .tile {
-  --tile: 38px;
+/* 10 equal slots that shrink to fit any width (a few stay empty for spacing);
+   tiles fill their slot and scale their letter to the slot width. */
+.rack-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 46px;
+  aspect-ratio: 1 / 1;
+  container-type: inline-size;
+}
+.rack-slot .tile {
+  width: 100%;
+  height: 100%;
+  font-size: 46cqi;
   cursor: pointer;
+}
+.rack-slot.empty {
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 16%;
+  opacity: 0.45;
 }
 .actions {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
-.act {
-  display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
-  gap: 4px;
-}
-.act-label {
-  font-size: 10px;
-  letter-spacing: 0.02em;
-  color: var(--text-soft);
+  gap: 14px;
 }
 .round-btn {
   width: 42px;

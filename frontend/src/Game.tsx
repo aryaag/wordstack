@@ -18,7 +18,11 @@ interface Staged {
 }
 
 /** Where a drag started: a rack slot or an already-staged board cell. */
-type DragSource = { kind: "rack"; rackIndex: number } | { kind: "cell"; key: string };
+type DragSource = { kind: "rack"; rackIndex: number; slot: number } | { kind: "cell"; key: string };
+
+/** Rack has RACK_SLOTS positions (tiles + a few empty ones for spacing); each
+ *  slot holds a rack-tile index or null. Players can drag tiles between slots. */
+const RACK_SLOTS = 10;
 
 interface DragGhost {
   letter: string;
@@ -30,7 +34,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const { state, me } = room;
   const [staged, setStaged] = useState<Map<string, Staged>>(new Map());
   const [selected, setSelected] = useState<number | null>(null);
-  const [order, setOrder] = useState<number[]>([]);
+  const [slots, setSlots] = useState<(number | null)[]>([]);
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -44,7 +48,10 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const rackKey = myPlayer ? myPlayer.rack.join(",") : "";
 
   useEffect(() => {
-    setOrder(myPlayer ? myPlayer.rack.map((_, i) => i) : []);
+    const indices = myPlayer ? myPlayer.rack.map((_, i) => i) : [];
+    const padded: (number | null)[] = [...indices];
+    while (padded.length < RACK_SLOTS) padded.push(null);
+    setSlots(padded);
     setStaged(new Map());
     setSelected(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,12 +160,31 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setSelected(null);
   };
 
-  // Dropping a staged tile back over the rack recalls it.
+  // Dropping a staged tile back over the rack (but not a specific slot) recalls it.
   const dropOnRack = (source: DragSource) => {
     if (source.kind !== "cell") return;
     const m = new Map(staged);
     m.delete(source.key);
     stageTiles(m);
+    setSelected(null);
+  };
+
+  // Drop a tile onto a rack slot: rearrange within the rack (swapping with any
+  // occupant), and if the tile came from the board, recall it at the same time.
+  const dropOnSlot = (source: DragSource, toSlot: number) => {
+    const rackIndex = source.kind === "rack" ? source.rackIndex : staged.get(source.key)!.rackIndex;
+    const fromSlot = slots.indexOf(rackIndex);
+    if (source.kind === "rack" && fromSlot === toSlot) return; // dropped on itself
+    const ns = [...slots];
+    const occupant = ns[toSlot];
+    if (fromSlot >= 0) ns[fromSlot] = occupant; // occupant (or null) takes the old slot
+    ns[toSlot] = rackIndex;
+    setSlots(ns);
+    if (source.kind === "cell") {
+      const m = new Map(staged);
+      m.delete(source.key);
+      stageTiles(m);
+    }
     setSelected(null);
   };
 
@@ -191,7 +217,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       setTimeout(() => (suppressClick.current = false), 0);
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
       const cell = el?.closest("[data-cell]")?.getAttribute("data-cell");
+      const slotAttr = el?.closest("[data-rack-slot]")?.getAttribute("data-rack-slot");
       if (cell) dropOnCell(source, letter, cell);
+      else if (slotAttr != null) dropOnSlot(source, Number(slotAttr));
       else if (el?.closest("[data-rack]")) dropOnRack(source);
     };
 
@@ -228,11 +256,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     setStaged(new Map());
     setSelected(null);
   };
-  const recall = () => {
-    stageTiles(new Map());
-    setSelected(null);
-  };
-  const shuffle = () => setOrder((o) => [...o].sort(() => Math.random() - 0.5));
   const swap = () => {
     if (selected === null) return;
     room.swap(selected);
@@ -278,67 +301,49 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
             </div>
             <div className="rack" data-rack>
-              {order.map((i) => (
-                <Tile
-                  key={i}
-                  letter={myRack[i]}
-                  selected={i === selected}
-                  dim={used.has(i)}
-                  tappable={isMyTurn}
-                  draggable={isMyTurn && !used.has(i)}
-                  onClick={isMyTurn ? () => onRackTap(i) : undefined}
-                  onPointerDown={
-                    isMyTurn && !used.has(i)
-                      ? (e) => beginDrag({ kind: "rack", rackIndex: i }, myRack[i], e)
-                      : undefined
-                  }
-                />
-              ))}
+              {slots.map((ri, slotIdx) =>
+                ri === null ? (
+                  <div key={slotIdx} className="rack-slot empty" data-rack-slot={slotIdx} />
+                ) : (
+                  <div key={slotIdx} className="rack-slot" data-rack-slot={slotIdx}>
+                    <Tile
+                      letter={myRack[ri]}
+                      selected={ri === selected}
+                      dim={used.has(ri)}
+                      tappable={isMyTurn}
+                      draggable={isMyTurn && !used.has(ri)}
+                      onClick={isMyTurn ? () => onRackTap(ri) : undefined}
+                      onPointerDown={
+                        isMyTurn && !used.has(ri)
+                          ? (e) => beginDrag({ kind: "rack", rackIndex: ri, slot: slotIdx }, myRack[ri], e)
+                          : undefined
+                      }
+                    />
+                  </div>
+                ),
+              )}
             </div>
             {isMyTurn && (
               <div className="actions">
-                {staged.size > 0 ? (
-                  <>
-                    <div className="act">
-                      <button className="round-btn" onClick={recall} aria-label="Recall tiles">
-                        <Icon name="undo" size={18} />
-                      </button>
-                      <span className="act-label">recall</span>
-                    </div>
-                    <div className="act">
-                      <button className="round-btn" onClick={shuffle} aria-label="Shuffle rack">
-                        <Icon name="shuffle" size={18} />
-                      </button>
-                      <span className="act-label">shuffle</span>
-                    </div>
-                    <div className="act">
-                      <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Submit">
-                        <Icon name="check" size={22} />
-                      </button>
-                      <span className="act-label">submit</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="act">
-                      <button className="round-btn" onClick={() => room.pass()} aria-label="Pass">
-                        <Icon name="ban" size={18} />
-                      </button>
-                      <span className="act-label">pass</span>
-                    </div>
-                    <div className="act">
-                      <button
-                        className="round-btn"
-                        onClick={swap}
-                        disabled={selected === null || state.bagCount === 0}
-                        aria-label="Swap selected tile"
-                      >
-                        <Icon name="swap" size={18} />
-                      </button>
-                      <span className="act-label">swap</span>
-                    </div>
-                  </>
-                )}
+                <button
+                  className="round-btn"
+                  onClick={() => room.pass()}
+                  disabled={staged.size > 0}
+                  aria-label="Skip turn"
+                >
+                  <Icon name="ban" size={18} />
+                </button>
+                <button
+                  className="round-btn"
+                  onClick={swap}
+                  disabled={staged.size > 0 || selected === null || state.bagCount === 0}
+                  aria-label="Swap selected tile"
+                >
+                  <Icon name="swap" size={18} />
+                </button>
+                <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Submit">
+                  <Icon name="check" size={22} />
+                </button>
               </div>
             )}
           </div>
