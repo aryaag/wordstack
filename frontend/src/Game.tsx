@@ -245,7 +245,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     <>
       <div className="appbar">
         <span className="brand">
-          <span className="mini">U</span> Upwords
+          <span className="mini">W</span> Wordstack
         </span>
         <span className="right">
           <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)} aria-label="Players & history">

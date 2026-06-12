@@ -5,9 +5,10 @@ account_id = "bd277bcc988f209d747de2d97bba55c0"
 workers_dev = true  # keep the *.workers.dev URL alongside the custom domain
 
 # Custom domain — wrangler provisions the DNS record + TLS cert on deploy
-# (zone aryaadarshagautam.com is on this account).
+# (zone aryaadarshagautam.com is on this account). App is branded "Wordstack";
+# the Worker script name stays "upwords" so the DO storage (live rooms) is preserved.
 routes = [
-  { pattern = "upwords.aryaadarshagautam.com", custom_domain = true }
+  { pattern = "wordstack.aryaadarshagautam.com", custom_domain = true }
 ]
 
 # Static frontend (built by Vite into frontend/dist), served via Workers Assets.

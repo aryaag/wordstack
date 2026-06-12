@@ -1,4 +1,4 @@
-/* Upwords UI — design system ported from the reference handoff. Mobile-first;
+/* Wordstack UI — design system ported from the reference handoff. Mobile-first;
    the web version is the same centered app column on a neutral surface. */
 :root {
   --bg-surface: #ece7dc;
@@ -450,11 +450,13 @@ svg {
 }
 .logo {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
   margin-bottom: 18px;
 }
 .logo .tile {
-  --tile: 38px;
+  --tile: 32px;
   border-radius: 7px;
 }
 .logo .tile.raised {

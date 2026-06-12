@@ -2,8 +2,8 @@ import { useState } from "react";
 import { type RoomConn } from "./useRoom";
 import { Icon, Tile } from "./lib";
 
-const LOGO = "UPWORDS".split("");
-const RAISED: Record<number, number> = { 0: 2, 3: 3 }; // index → height badge + raised edge
+const LOGO = "WORDSTACK".split("");
+const RAISED: Record<number, number> = { 0: 2, 4: 3 }; // index → height badge + raised edge
 
 export function Landing({
   name,
@@ -112,7 +112,7 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
     <>
       <div className="appbar">
         <span className="brand">
-          <span className="mini">U</span> Upwords
+          <span className="mini">W</span> Wordstack
         </span>
         <button
           className="icon-btn"
