@@ -13,6 +13,9 @@ export function Board({
   hoverCell,
   onCell,
   onTilePointerDown,
+  flash,
+  tumble,
+  shake = false,
 }: {
   board: BoardT;
   overlay: Overlay;
@@ -20,6 +23,12 @@ export function Board({
   onCell: (r: number, c: number) => void;
   /** Begin a drag from a provisional (staged) tile at this cell. */
   onTilePointerDown?: (key: string, e: ReactPointerEvent) => void;
+  /** Cells to briefly flash gold (just committed). */
+  flash?: Set<string>;
+  /** Cells to render as tumbling tiles (a move was just rejected). */
+  tumble?: Map<string, string> | null;
+  /** Shake the whole board once (on rejection). */
+  shake?: boolean;
 }) {
   const cells = [];
   for (let r = 0; r < 10; r++) {
@@ -53,10 +62,14 @@ export function Board({
             height={committedH}
             tappable
             hover={isHover}
+            flash={flash?.has(key)}
             dataCell={key}
             onClick={() => onCell(r, c)}
           />,
         );
+      } else if (tumble?.has(key)) {
+        // A just-rejected tile, tumbling back off the board.
+        cells.push(<Tile key={key} letter={tumble.get(key)!} isNew tumble />);
       } else {
         const isCenter = (r === 4 || r === 5) && (c === 4 || c === 5);
         cells.push(
@@ -70,7 +83,7 @@ export function Board({
       }
     }
   }
-  return <div className="board">{cells}</div>;
+  return <div className={`board${shake ? " shake" : ""}`}>{cells}</div>;
 }
 
 export function Rail({ players, activeId }: { players: PlayerState[]; activeId?: string }) {

@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlacedTile } from "../../worker/src/engine";
 import type { ClientMessage, DefineResult, PublicState, ServerMessage } from "../../worker/src/protocol";
-import { playAccepted, playChallenge, playRejected, playSubmit } from "./sound";
+import {
+  haptic,
+  playAccepted,
+  playBingo,
+  playChallenge,
+  playRejected,
+  playScoreTally,
+  playSubmit,
+  playYourTurn,
+} from "./sound";
 
 const PLAYER_ID_KEY = "upwords:playerId";
 const NAME_KEY = "upwords:name";
@@ -55,10 +64,20 @@ export async function fetchDefinition(word: string, room?: string): Promise<Defi
   return (await res.json()) as DefineResult;
 }
 
+/** A committed move, surfaced so the UI can animate a score pop / word flash. */
+export interface AppliedEvent {
+  by: string;
+  points: number;
+  bingo: boolean;
+  at: number; // Date.now() — also acts as a change signal
+}
+
 export interface RoomConn {
   state: PublicState | null;
   connected: boolean;
   notice: string | null; // transient: errors, move applied/rejected
+  applied: AppliedEvent | null; // last committed move (for animations)
+  rejectSignal: number; // bumped on each move_rejected (for the tumble animation)
   me: string; // this client's playerId
   start: () => void;
   submit: (placed: PlacedTile[]) => void;
@@ -68,6 +87,7 @@ export interface RoomConn {
   vote: (vote: "allow" | "reject") => void;
   pass: () => void;
   swap: (index: number) => void;
+  rematch: () => void;
   leave: () => void;
 }
 
@@ -81,8 +101,11 @@ export function useRoom(code: string | null, name: string): RoomConn {
   const [state, setState] = useState<PublicState | null>(null);
   const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [applied, setApplied] = useState<AppliedEvent | null>(null);
+  const [rejectSignal, setRejectSignal] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const closedByUs = useRef(false);
+  const prevCurrentId = useRef<string | undefined>(undefined);
   const me = getPlayerId();
 
   useEffect(() => {
@@ -106,19 +129,34 @@ export function useRoom(code: string | null, name: string): RoomConn {
       ws.addEventListener("message", (e) => {
         const msg = JSON.parse(e.data) as ServerMessage;
         switch (msg.type) {
-          case "state":
+          case "state": {
+            // Detect the turn passing to me (it wasn't my turn before) → chime.
+            const cur = msg.game.players[msg.game.turnSeat]?.id;
+            if (msg.game.phase === "playing" && cur === me && prevCurrentId.current && prevCurrentId.current !== me) {
+              playYourTurn();
+              haptic(14);
+            }
+            if (msg.game.phase === "playing" || msg.game.phase === "pending") prevCurrentId.current = cur;
+            else prevCurrentId.current = undefined;
             setState(msg.game);
             break;
+          }
           case "move_pending":
             playSubmit(); // a player submitted their turn
             break;
           case "move_applied":
             setNotice(`Move accepted — +${msg.points} points`);
-            playAccepted(); // move committed (accepted / challenge allowed)
+            if (msg.bingo) playBingo();
+            else playAccepted(); // move committed (accepted / challenge allowed)
+            playScoreTally(msg.points);
+            haptic(msg.bingo ? [18, 40, 18] : 18);
+            setApplied({ by: msg.by, points: msg.points, bingo: msg.bingo, at: Date.now() });
             break;
           case "move_rejected":
             setNotice(msg.reason);
             playRejected(); // move rejected by challenge
+            haptic([10, 30, 10]);
+            setRejectSignal((n) => n + 1);
             break;
           case "challenge_update":
             playChallenge(); // someone challenged a word — alert the table
@@ -159,6 +197,8 @@ export function useRoom(code: string | null, name: string): RoomConn {
     state,
     connected,
     notice,
+    applied,
+    rejectSignal,
     me,
     start: () => action({ type: "start_game" }),
     submit: (placed) => action({ type: "submit_move", placed }),
@@ -168,6 +208,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
     vote: (vote) => action({ type: "vote_move", vote }),
     pass: () => action({ type: "pass" }),
     swap: (index) => action({ type: "swap_tiles", index }),
+    rematch: () => action({ type: "rematch" }),
     leave: () => action({ type: "leave" }),
   };
 }

@@ -170,6 +170,8 @@ export class Room {
         return this.onVote(ws, msg.vote);
       case "pass":
         return this.onPass(ws);
+      case "rematch":
+        return this.onRematch(ws);
       case "swap_tiles":
         return this.onSwap(ws, msg.index);
       case "leave":
@@ -227,7 +229,51 @@ export class Room {
     s.bag = bag;
     s.phase = "playing";
     s.turnSeat = Math.floor(Math.random() * s.players.length); // randomize who goes first
+    s.turnStartedAt = Date.now();
     s.consecutivePasses = 0;
+    await this.armTurnTimer(s);
+    await this.persistAndBroadcast();
+  }
+
+  /** Replay with the same table: reset board/scores/history and deal fresh racks.
+   *  Players who left are dropped; survivors keep their identity, re-seated. */
+  private async onRematch(ws: WebSocket): Promise<void> {
+    const s = this.requireState(ws);
+    if (!s) return;
+    if (s.phase !== "gameover") {
+      return this.send(ws, { type: "error", message: "no finished game to rematch" });
+    }
+    const survivors = s.players.filter((p) => !p.left);
+    if (survivors.length < 2) {
+      return this.send(ws, { type: "error", message: "need at least 2 players to rematch" });
+    }
+    survivors.forEach((p, i) => {
+      p.seat = i;
+      p.score = 0;
+      p.rack = [];
+    });
+    s.players = survivors;
+    s.hostId = survivors.some((p) => p.id === s.hostId) ? s.hostId : survivors[0].id;
+    s.board = makeEmptyBoard(CONFIG.boardSize);
+    s.boardMeta = {};
+    s.history = [];
+    s.seed = Math.floor(Math.random() * 0xffffffff);
+    let bag = newShuffledBag(s.seed);
+    for (const p of s.players) {
+      const dealt = refill([], bag, CONFIG.rackSize);
+      p.rack = dealt.rack;
+      bag = dealt.bag;
+    }
+    s.bag = bag;
+    s.phase = "playing";
+    s.turnSeat = Math.floor(Math.random() * s.players.length);
+    s.turnStartedAt = Date.now();
+    s.consecutivePasses = 0;
+    s.pending = null;
+    s.draft = null;
+    s.endReason = null;
+    s.scored = false;
+    await this.ctx.storage.deleteAlarm(); // cancel the post-game cleanup alarm
     await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
@@ -549,6 +595,7 @@ export class Room {
       by: pending.submitterId,
       points: pending.totalPoints,
       words: pending.words,
+      bingo: pending.bingoBonus > 0,
     });
     // Endgame: a player goes out (empties their rack) with an empty bag.
     if (submitter.rack.length === 0 && s.bag.length === 0) {
@@ -584,6 +631,7 @@ export class Room {
       const seat = (s.turnSeat + i) % n;
       if (!s.players[seat].left) {
         s.turnSeat = seat;
+        s.turnStartedAt = Date.now();
         return;
       }
     }
@@ -685,6 +733,7 @@ function freshLobby(code: string): GameState {
     bag: [],
     seed: 0,
     turnSeat: 0,
+    turnStartedAt: 0,
     consecutivePasses: 0,
     pending: null,
     history: [],

@@ -55,6 +55,8 @@ export interface GameState {
   bag: Tile[];
   seed: number;
   turnSeat: number;
+  /** Epoch ms when the current turn began — drives the soft turn-timer ring. */
+  turnStartedAt: number;
   consecutivePasses: number;
   pending: PendingMove | null;
   history: TurnRecord[];
@@ -105,6 +107,7 @@ export type ClientMessage =
   | { type: "vote_move"; vote: "allow" | "reject" }
   | { type: "pass" }
   | { type: "swap_tiles"; index: number }
+  | { type: "rematch" }
   | { type: "leave" };
 
 export type ServerMessage =
@@ -112,7 +115,7 @@ export type ServerMessage =
   | { type: "move_pending"; words: PendingWord[]; totalPoints: number; bingoBonus: number; deadline: number }
   | { type: "challenge_update"; playerId: string; wordIndex: number }
   | { type: "challenge_result"; challenged: { word: string; by: string[] }[] }
-  | { type: "move_applied"; by: string; points: number; words: PendingWord[] }
+  | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean }
   | { type: "move_rejected"; reason: string }
   | { type: "game_over"; reason: string }
   | { type: "error"; message: string };

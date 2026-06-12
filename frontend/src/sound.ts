@@ -29,6 +29,16 @@ if (typeof window !== "undefined") {
   window.addEventListener("keydown", unlock);
 }
 
+/** Light mobile haptic feedback — no-op where the Vibration API is unsupported
+ *  (desktop, iOS Safari) or denied. */
+export function haptic(pattern: number | number[] = 12): void {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* ignore */
+  }
+}
+
 interface Blip {
   freq: number;
   to?: number; // glide target frequency
@@ -53,9 +63,57 @@ function blip({ freq, to, type = "triangle", dur = 0.08, gain = 0.12, delay = 0 
   osc.stop(t0 + dur + 0.02);
 }
 
-/** Soft wooden "tock" when a tile is placed on the board. */
-export function playPlace(): void {
-  blip({ freq: 230, to: 150, type: "triangle", dur: 0.07, gain: 0.14 });
+/** Soft wooden "tock" when a tile is placed — pitch rises with the stack height
+ *  it lands on, so taller stacks sound higher (height 1 = lowest). */
+export function playPlace(height = 1): void {
+  const h = Math.max(1, Math.min(height, 5));
+  const base = 200 + (h - 1) * 72;
+  blip({ freq: base, to: base * 0.62, type: "triangle", dur: 0.07, gain: 0.14 });
+}
+
+/** Big ascending arpeggio when a player uses all 7 tiles (bingo, +20). */
+export function playBingo(): void {
+  const notes = [523, 659, 784, 1047, 1319]; // C5 E5 G5 C6 E6
+  notes.forEach((f, i) => blip({ freq: f, type: "triangle", dur: 0.16, gain: 0.12, delay: i * 0.07 }));
+  blip({ freq: 1568, type: "sine", dur: 0.3, gain: 0.1, delay: notes.length * 0.07 }); // sparkle G6
+}
+
+/** Quick run of rising blips when a move scores — more blips for more points. */
+export function playScoreTally(points: number): void {
+  const n = Math.max(2, Math.min(Math.round(points / 3), 7));
+  for (let i = 0; i < n; i++) {
+    blip({ freq: 520 + i * 60, type: "sine", dur: 0.05, gain: 0.07, delay: 0.28 + i * 0.05 });
+  }
+}
+
+/** Bright little sparkle when the Qu bonus tile is played. */
+export function playQu(): void {
+  blip({ freq: 988, to: 1319, type: "sine", dur: 0.1, gain: 0.1 });
+  blip({ freq: 1319, to: 1760, type: "sine", dur: 0.12, gain: 0.09, delay: 0.08 });
+}
+
+/** Subtle tick for the final seconds of the accept countdown. */
+export function playTick(): void {
+  blip({ freq: 880, type: "square", dur: 0.03, gain: 0.05 });
+}
+
+/** Gentle two-note rise when it becomes your turn. */
+export function playYourTurn(): void {
+  blip({ freq: 587, to: 660, type: "sine", dur: 0.11, gain: 0.11 }); // D5
+  blip({ freq: 880, type: "sine", dur: 0.18, gain: 0.12, delay: 0.11 }); // A5
+}
+
+/** Triumphant flourish on the end screen when you win (or tie for the lead). */
+export function playWin(): void {
+  [523, 659, 784, 1047].forEach((f, i) =>
+    blip({ freq: f, type: "triangle", dur: 0.18, gain: 0.12, delay: i * 0.1 }),
+  );
+}
+
+/** Soft descending tone on the end screen when you don't win. */
+export function playLose(): void {
+  blip({ freq: 440, to: 392, type: "sine", dur: 0.22, gain: 0.1 });
+  blip({ freq: 349, to: 294, type: "sine", dur: 0.34, gain: 0.1, delay: 0.2 });
 }
 
 /** Attention-grabbing two-tone when a player challenges a word. */

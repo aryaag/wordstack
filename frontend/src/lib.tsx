@@ -63,6 +63,8 @@ export function Tile({
   draggable = false,
   ghost = false,
   hover = false,
+  flash = false,
+  tumble = false,
   dataCell,
   onClick,
   onPointerDown,
@@ -76,6 +78,8 @@ export function Tile({
   draggable?: boolean;
   ghost?: boolean;
   hover?: boolean;
+  flash?: boolean;
+  tumble?: boolean;
   dataCell?: string;
   onClick?: () => void;
   onPointerDown?: (e: ReactPointerEvent) => void;
@@ -89,6 +93,8 @@ export function Tile({
     draggable && "draggable",
     ghost && "ghost",
     hover && "drop-hover",
+    flash && "flash",
+    tumble && "tumble",
   ]
     .filter(Boolean)
     .join(" ");

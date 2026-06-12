@@ -1411,3 +1411,208 @@ svg {
   color: var(--warn-fg);
   border-color: var(--warn-fg);
 }
+
+/* ── Juice: animations & effects ─────────────────────────────────────────── */
+.board-wrap {
+  position: relative;
+}
+
+/* Tile drop "thunk" when placed/staged; the height number pops in. */
+@keyframes tile-thunk {
+  0% {
+    transform: translateY(-22%) scale(1.06);
+  }
+  55% {
+    transform: translateY(0) scale(0.94, 1.05);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+.tile.is-new {
+  animation: tile-thunk 0.18s ease-out;
+}
+@keyframes num-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tile.is-new .num {
+  transform-origin: center;
+  animation: num-pop 0.26s ease-out;
+}
+
+/* Gold flash on a freshly committed word. */
+@keyframes flash-gold {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(176, 123, 18, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 3px rgba(176, 123, 18, 0.75);
+  }
+}
+.tile.flash {
+  animation: flash-gold 0.7s ease-out;
+}
+
+/* Tumble a rejected tile off the board. */
+@keyframes tumble-out {
+  0% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(42px) rotate(28deg);
+    opacity: 0;
+  }
+}
+.tile.tumble {
+  animation: tumble-out 0.55s ease-in forwards;
+  pointer-events: none;
+}
+
+/* Board shake on rejection. */
+@keyframes board-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.board.shake {
+  animation: board-shake 0.4s ease-in-out;
+}
+
+/* Floating "+score" over the board. */
+@keyframes score-float {
+  0% {
+    transform: translate(-50%, 10px);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -48px);
+    opacity: 0;
+  }
+}
+.score-pop {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--good-fg);
+  text-shadow:
+    0 1px 0 #fff,
+    0 0 14px rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+  z-index: 5;
+  animation: score-float 1.4s ease-out forwards;
+}
+.score-pop.bingo {
+  color: var(--tile-num);
+  font-size: 34px;
+}
+.bingo-label {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--tile-edge);
+}
+
+/* Rack deal-in slide on refill. */
+@keyframes deal-in {
+  0% {
+    transform: translateY(-10px) scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.rack-slot.deal-in {
+  animation: deal-in 0.28s ease-out both;
+}
+
+/* Turn-timer ring around the active avatar. */
+.av-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.turn-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* End-screen superlatives. */
+.superlatives {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+}
+.superlative {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-soft);
+  border-radius: var(--r-md);
+  font-size: 14px;
+}
+.sl-icon {
+  font-size: 17px;
+}
+.sl-label {
+  color: var(--text-soft);
+}
+.sl-value {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile.is-new,
+  .tile.is-new .num,
+  .tile.flash,
+  .tile.tumble,
+  .board.shake,
+  .score-pop,
+  .rack-slot.deal-in,
+  .tray.active {
+    animation: none !important;
+  }
+  .tile.tumble {
+    opacity: 0;
+  }
+}

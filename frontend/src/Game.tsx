@@ -7,7 +7,7 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
-import { playPlace } from "./sound";
+import { haptic, playPlace, playQu, playTick } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
@@ -44,6 +44,14 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   // Set true for one tick after a real drag so the trailing click is ignored.
   const suppressClick = useRef(false);
 
+  // ── Juice: score pop, gold word flash, reject tumble/shake ──────────────
+  const [scorePop, setScorePop] = useState<{ points: number; bingo: boolean; id: number } | null>(null);
+  const [flashCells, setFlashCells] = useState<Set<string>>(new Set());
+  const [tumble, setTumble] = useState<Map<string, string> | null>(null);
+  const [boardShake, setBoardShake] = useState(false);
+  const prevBoardRef = useRef<string[][][] | null>(null);
+  const lastPendingRef = useRef<Map<string, string>>(new Map());
+
   const myPlayer = state?.players.find((p) => p.id === me);
   const rackKey = myPlayer ? myPlayer.rack.join(",") : "";
 
@@ -63,6 +71,69 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [room.notice]);
+
+  // A move committed → float a "+score" over the board.
+  useEffect(() => {
+    if (!room.applied) return;
+    setScorePop({ points: room.applied.points, bingo: room.applied.bingo, id: room.applied.at });
+    const t = setTimeout(() => setScorePop(null), 1400);
+    return () => clearTimeout(t);
+  }, [room.applied]);
+
+  // Diff the committed board → briefly flash the cells whose stack just grew.
+  const board = state?.board;
+  useEffect(() => {
+    if (!board) return;
+    const prev = prevBoardRef.current;
+    const changed = new Set<string>();
+    if (prev) {
+      for (let r = 0; r < board.length; r++)
+        for (let c = 0; c < board[r].length; c++)
+          if (board[r][c].length > (prev[r]?.[c]?.length ?? 0)) changed.add(cellKey(r, c));
+    }
+    prevBoardRef.current = board;
+    if (!changed.size) return;
+    setFlashCells(changed);
+    const t = setTimeout(() => setFlashCells(new Set()), 800);
+    return () => clearTimeout(t);
+  }, [board]);
+
+  // Remember the pending move's cells so we can tumble them if it's rejected.
+  const pending = state?.pending;
+  useEffect(() => {
+    if (!pending) return;
+    lastPendingRef.current = new Map(pending.placed.map((p) => [cellKey(p.row, p.col), p.letter]));
+  }, [pending]);
+
+  // A move was rejected → tumble the placed tiles off and shake the board.
+  useEffect(() => {
+    if (!room.rejectSignal) return;
+    if (lastPendingRef.current.size) {
+      setTumble(new Map(lastPendingRef.current));
+      const tt = setTimeout(() => setTumble(null), 600);
+      const st = setTimeout(() => setBoardShake(false), 450);
+      setBoardShake(true);
+      return () => {
+        clearTimeout(tt);
+        clearTimeout(st);
+      };
+    }
+  }, [room.rejectSignal]);
+
+  // Tick down the last few seconds of the open accept countdown.
+  const openDeadline = state?.phase === "pending" && state.pending?.stage === "open" ? state.pending.deadline : null;
+  useEffect(() => {
+    if (!openDeadline) return;
+    let last = -1;
+    const iv = setInterval(() => {
+      const secs = Math.ceil((openDeadline - Date.now()) / 1000);
+      if (secs >= 1 && secs <= 5 && secs !== last) {
+        last = secs;
+        playTick();
+      }
+    }, 250);
+    return () => clearInterval(iv);
+  }, [openDeadline]);
 
   // Announce the (randomly chosen) starting player once, when the game begins.
   const announcedStart = useRef(false);
@@ -130,7 +201,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       const m = new Map(staged);
       m.set(key, { letter: myRack[selected], rackIndex: selected });
       stageTiles(m);
-      playPlace();
+      playPlace(state.board[r][c].length + 1);
+      haptic(10);
       setSelected(null);
     } else {
       openInspect(r, c);
@@ -156,7 +228,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     const rackIndex = source.kind === "rack" ? source.rackIndex : staged.get(source.key)!.rackIndex;
     m.set(key, { letter, rackIndex });
     stageTiles(m);
-    playPlace();
+    const [r, c] = key.split(",").map(Number);
+    playPlace(state.board[r][c].length + 1);
+    haptic(10);
     setSelected(null);
   };
 
@@ -252,6 +326,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
   const commit = () => {
     if (!valid) return;
+    if (placed.some((p) => p.letter === "qu")) playQu();
+    haptic(22);
     room.submit(placed);
     setStaged(new Map());
     setSelected(null);
@@ -280,13 +356,25 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
       <div className="game-body">
         <div className="game-main">
-          <Board
-            board={state.board}
-            overlay={overlay}
-            hoverCell={hoverCell}
-            onCell={onCell}
-            onTilePointerDown={isMyTurn ? (key, e) => beginDrag({ kind: "cell", key }, overlay.get(key)!, e) : undefined}
-          />
+          <div className="board-wrap">
+            <Board
+              board={state.board}
+              overlay={overlay}
+              hoverCell={hoverCell}
+              onCell={onCell}
+              onTilePointerDown={
+                isMyTurn ? (key, e) => beginDrag({ kind: "cell", key }, overlay.get(key)!, e) : undefined
+              }
+              flash={flashCells}
+              tumble={tumble}
+              shake={boardShake}
+            />
+            {scorePop && (
+              <div key={scorePop.id} className={`score-pop${scorePop.bingo ? " bingo" : ""}`}>
+                {scorePop.bingo && <span className="bingo-label">BINGO!</span>}+{scorePop.points}
+              </div>
+            )}
+          </div>
 
           {isMyTurn && (
             <div className={`preview${preview?.bad ? " bad" : ""}`}>
@@ -300,12 +388,17 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
             </div>
-            <div className="rack" data-rack>
+            <div className="rack" data-rack key={rackKey}>
               {slots.map((ri, slotIdx) =>
                 ri === null ? (
                   <div key={slotIdx} className="rack-slot empty" data-rack-slot={slotIdx} />
                 ) : (
-                  <div key={slotIdx} className="rack-slot" data-rack-slot={slotIdx}>
+                  <div
+                    key={slotIdx}
+                    className="rack-slot deal-in"
+                    data-rack-slot={slotIdx}
+                    style={{ animationDelay: `${slotIdx * 35}ms` }}
+                  >
                     <Tile
                       letter={myRack[ri]}
                       selected={ri === selected}

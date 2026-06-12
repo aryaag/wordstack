@@ -96,7 +96,7 @@ function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave
       ) : state.phase === "lobby" ? (
         <Lobby room={room} onLeave={onLeave} />
       ) : state.phase === "gameover" ? (
-        <EndScreen state={state} onLeave={onLeave} />
+        <EndScreen state={state} me={room.me} onRematch={room.rematch} onLeave={onLeave} />
       ) : (
         <Game room={room} onLeave={onLeave} />
       )}

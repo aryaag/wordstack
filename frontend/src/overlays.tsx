@@ -3,6 +3,7 @@ import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
 import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, playedWords, Tile, TimerRing } from "./lib";
+import { playLose, playWin } from "./sound";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
 const colorOf = (p?: PlayerState) => (p ? AVATAR_COLORS[p.seat % 4] : FALLBACK);
@@ -14,6 +15,35 @@ export interface InspectLayer {
 }
 
 const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
+
+/** Thin progress ring around the active player's avatar (soft turn pace, ~2 min). */
+const TURN_SOFT_MS = 120_000;
+function TurnRing({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  const frac = Math.min(1, Math.max(0, (now - startedAt) / TURN_SOFT_MS));
+  const r = 22;
+  const circ = 2 * Math.PI * r;
+  return (
+    <svg className="turn-ring" width="48" height="48" viewBox="0 0 48 48" aria-hidden>
+      <circle
+        cx="24"
+        cy="24"
+        r={r}
+        fill="none"
+        stroke="var(--info-fg)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeDasharray={circ.toFixed(1)}
+        strokeDashoffset={(circ * (1 - frac)).toFixed(1)}
+        transform="rotate(-90 24 24)"
+      />
+    </svg>
+  );
+}
 
 // ── Compact player strip (avatar circles + score + turn ring), always on top ──
 export function PlayerStrip({ state, me, onHistory }: { state: PublicState; me: string; onHistory: () => void }) {
@@ -36,8 +66,11 @@ export function PlayerStrip({ state, me, onHistory }: { state: PublicState; me: 
             className={`pcell${isCurrent ? " active" : ""}${p.left ? " gone" : ""}`}
             title={p.left ? `${p.name} (left)` : p.name}
           >
-            <span className="av" style={{ background: col.bg, color: col.fg }}>
-              {avatarLabel(p.name, names)}
+            <span className="av-wrap">
+              {isCurrent && inPlay && <TurnRing startedAt={state.turnStartedAt} />}
+              <span className="av" style={{ background: col.bg, color: col.fg }}>
+                {avatarLabel(p.name, names)}
+              </span>
             </span>
             <span className="pscore-mini">
               {p.score}
@@ -417,11 +450,55 @@ export function Reconnecting() {
   );
 }
 
+/** Fun end-of-game stats derived from the final board + move history. */
+function superlatives(state: PublicState): { icon: string; label: string; value: string }[] {
+  const out: { icon: string; label: string; value: string }[] = [];
+  // Tallest stack on the board.
+  let tallest = 0;
+  for (const row of state.board) for (const cell of row) tallest = Math.max(tallest, cell.length);
+  if (tallest >= 2) out.push({ icon: "🗼", label: "Tallest stack", value: `${tallest} high` });
+
+  // Best (highest-scoring) and longest words across all committed turns.
+  let best: { word: string; points: number } | null = null;
+  let longest = "";
+  for (const rec of state.history)
+    for (const w of rec.words) {
+      if (!best || w.points > best.points) best = { word: w.word, points: w.points };
+      if (w.word.length > longest.length) longest = w.word;
+    }
+  if (best) out.push({ icon: "⭐", label: "Top word", value: `${displayLetter(best.word)} · +${best.points}` });
+  if (longest.length >= 4 && longest.toLowerCase() !== best?.word.toLowerCase())
+    out.push({ icon: "📏", label: "Longest word", value: displayLetter(longest) });
+  return out;
+}
+
 // ── End screen (game over / canceled) ───────────────────────────────────────
-export function EndScreen({ state, onLeave }: { state: PublicState; onLeave: () => void }) {
+export function EndScreen({
+  state,
+  me,
+  onRematch,
+  onLeave,
+}: {
+  state: PublicState;
+  me: string;
+  onRematch: () => void;
+  onLeave: () => void;
+}) {
   const ranked = [...state.players].sort((a, b) => b.score - a.score);
   const topScore = ranked[0]?.score;
   const penaltyPts = DEFAULT_CONFIG.endgameTilePenaltyPoints;
+  const iWon = state.players.find((p) => p.id === me)?.score === topScore;
+  const canRematch = state.players.filter((p) => !p.left).length >= 2;
+  const stats = superlatives(state);
+
+  // Win / lose sting on entry (only for a real, scored finish — not a cancel).
+  useEffect(() => {
+    if (!state.scored) return;
+    const t = setTimeout(() => (iWon ? playWin() : playLose()), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="panel" style={{ textAlign: "center" }}>
       <h2>Game over</h2>
@@ -449,7 +526,23 @@ export function EndScreen({ state, onLeave }: { state: PublicState; onLeave: () 
           );
         })}
       </ul>
-      <button className="cta primary" onClick={onLeave}>
+      {stats.length > 0 && (
+        <div className="superlatives">
+          {stats.map((s) => (
+            <div key={s.label} className="superlative">
+              <span className="sl-icon">{s.icon}</span>
+              <span className="sl-label">{s.label}</span>
+              <span className="sl-value">{s.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {canRematch && (
+        <button className="cta primary" onClick={onRematch}>
+          Rematch
+        </button>
+      )}
+      <button className="cta" onClick={onLeave}>
         Back to home
       </button>
     </div>
