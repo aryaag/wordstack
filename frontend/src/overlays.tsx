@@ -44,34 +44,36 @@ export function PlayerStrip({ state, me }: { state: PublicState; me: string }) {
 }
 
 // ── Players scoreboard + move history (side panel on wide; drawer on mobile) ──
-export function GameInfo({ state, me }: { state: PublicState; me: string }) {
+export function GameInfo({ state, me, showPlayers = true }: { state: PublicState; me: string; showPlayers?: boolean }) {
   const current = state.players[state.turnSeat];
   const ranked = [...state.players].sort((a, b) => b.score - a.score);
   return (
     <>
-      <div className="gpanel">
-        <p className="ph">
-          <Icon name="trophy" size={15} /> Players
-        </p>
-        {ranked.map((p) => {
-          const col = colorOf(p);
-          const isCurrent = p.id === current?.id && state.phase !== "gameover";
-          return (
-            <div key={p.id} className={`prow${p.id === me ? " you" : ""}${p.left ? " gone" : ""}`}>
-              <span className="av" style={{ background: col.bg, color: col.fg }}>
-                {initials(p.name)}
-              </span>
-              <span className="pn">
-                {p.name}
-                {p.id === me ? " · you" : ""}
-                {isCurrent ? " · turn" : ""}
-                {p.left ? " · left" : p.connected ? "" : " · away"}
-              </span>
-              <span className="ps">{p.score}</span>
-            </div>
-          );
-        })}
-      </div>
+      {showPlayers && (
+        <div className="gpanel">
+          <p className="ph">
+            <Icon name="trophy" size={15} /> Players
+          </p>
+          {ranked.map((p) => {
+            const col = colorOf(p);
+            const isCurrent = p.id === current?.id && state.phase !== "gameover";
+            return (
+              <div key={p.id} className={`prow${p.id === me ? " you" : ""}${p.left ? " gone" : ""}`}>
+                <span className="av" style={{ background: col.bg, color: col.fg }}>
+                  {initials(p.name)}
+                </span>
+                <span className="pn">
+                  {p.name}
+                  {p.id === me ? " · you" : ""}
+                  {isCurrent ? " · turn" : ""}
+                  {p.left ? " · left" : p.connected ? "" : " · away"}
+                </span>
+                <span className="ps">{p.score}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="gpanel">
         <p className="ph">

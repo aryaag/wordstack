@@ -362,7 +362,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         </div>
 
         <aside className="game-side">
-          <GameInfo state={state} me={me} />
+          <GameInfo state={state} me={me} showPlayers={false} />
         </aside>
       </div>
 
