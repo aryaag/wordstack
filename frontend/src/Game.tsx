@@ -7,7 +7,7 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
-import { haptic, playPlace, playQu, playTick } from "./sound";
+import { haptic, playPlace, playTick } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
@@ -326,7 +326,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
   const commit = () => {
     if (!valid) return;
-    if (placed.some((p) => p.letter === "qu")) playQu();
     haptic(22);
     room.submit(placed);
     setStaged(new Map());

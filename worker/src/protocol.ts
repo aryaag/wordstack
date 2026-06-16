@@ -117,7 +117,7 @@ export type ServerMessage =
   | { type: "move_pending"; words: PendingWord[]; totalPoints: number; bingoBonus: number; deadline: number }
   | { type: "challenge_update"; playerId: string; wordIndex: number }
   | { type: "challenge_result"; challenged: { word: string; by: string[] }[] }
-  | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean }
+  | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean; qu: boolean }
   | { type: "move_rejected"; reason: string }
   | { type: "game_over"; reason: string }
   | { type: "error"; message: string };

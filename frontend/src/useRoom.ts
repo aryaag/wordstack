@@ -6,6 +6,8 @@ import {
   playAccepted,
   playBingo,
   playChallenge,
+  playPlace,
+  playQu,
   playRejected,
   playScoreTally,
   playSubmit,
@@ -106,6 +108,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
   const wsRef = useRef<WebSocket | null>(null);
   const closedByUs = useRef(false);
   const prevCurrentId = useRef<string | undefined>(undefined);
+  const prevDraftKeys = useRef<Set<string>>(new Set());
   const me = getPlayerId();
 
   useEffect(() => {
@@ -138,6 +141,21 @@ export function useRoom(code: string | null, name: string): RoomConn {
             }
             if (msg.game.phase === "playing" || msg.game.phase === "pending") prevCurrentId.current = cur;
             else prevCurrentId.current = undefined;
+            // Watchers hear the placement "tock" as the current player drops tiles
+            // live (the placing player already played it locally).
+            const draft = msg.game.draft;
+            if (draft && draft.by !== me) {
+              for (const p of draft.placed) {
+                const k = `${p.row},${p.col}`;
+                if (!prevDraftKeys.current.has(k)) {
+                  playPlace(msg.game.board[p.row][p.col].length + 1);
+                  break; // one tock per update
+                }
+              }
+              prevDraftKeys.current = new Set(draft.placed.map((p) => `${p.row},${p.col}`));
+            } else {
+              prevDraftKeys.current = new Set();
+            }
             setState(msg.game);
             break;
           }
@@ -148,6 +166,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
             setNotice(`Move accepted — +${msg.points} points`);
             if (msg.bingo) playBingo();
             else playAccepted(); // move committed (accepted / challenge allowed)
+            if (msg.qu) playQu(); // Qu sparkle for the whole table, not just the submitter
             playScoreTally(msg.points);
             haptic(msg.bingo ? [18, 40, 18] : 18);
             setApplied({ by: msg.by, points: msg.points, bingo: msg.bingo, at: Date.now() });

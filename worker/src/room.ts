@@ -610,6 +610,7 @@ export class Room {
       points: pending.totalPoints,
       words: pending.words,
       bingo: pending.bingoBonus > 0,
+      qu: pending.placed.some((p) => p.letter === "qu"),
     });
     // Endgame: a player goes out (empties their rack) with an empty bag.
     if (submitter.rack.length === 0 && s.bag.length === 0) {
