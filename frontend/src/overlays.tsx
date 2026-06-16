@@ -17,7 +17,7 @@ export interface InspectLayer {
 const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
 
 /** Thin progress ring around the active player's avatar (soft turn pace, ~2 min). */
-const TURN_SOFT_MS = 120_000;
+const TURN_SOFT_MS = 600_000;
 function TurnRing({ startedAt }: { startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
