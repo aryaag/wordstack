@@ -1237,14 +1237,16 @@ svg {
   .hist-btn {
     display: none;
   }
-  /* Wide: a single row of all 10 slots, shrinking to fit the column. */
+  /* Wide: a single row of all 10 equal slots, mirroring the board's 10-column
+     grid so filled and empty slots stay identical and aligned with the board
+     (a flex row let contentless empty slots keep their max-width while tile
+     slots shrank, leaving mismatched sizes on narrower tablets like the Air). */
   .rack {
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
   }
   .rack-slot {
-    flex: 1 1 0;
     min-width: 0;
-    max-width: 48px;
   }
 }
 
