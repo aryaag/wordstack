@@ -1,88 +1,127 @@
 import { useEffect, useState } from "react";
-import { createRoom, fetchRoomInfo, getPlayerId, getStoredName, setStoredName, useRoom } from "./useRoom";
-import { Landing, Lobby } from "./Landing";
+import {
+  clearRoomJoined,
+  createRoom,
+  getStoredName,
+  isRoomJoined,
+  markRoomJoined,
+  setStoredName,
+  useRoom,
+} from "./useRoom";
+import { HomePage, JoinPage, Lobby } from "./Landing";
 import { Game } from "./Game";
 import { EndScreen, Reconnecting } from "./overlays";
 import "./App.css";
 
-const roomFromUrl = () => new URLSearchParams(location.search).get("room");
-function setRoomUrl(code: string | null) {
-  const url = new URL(location.href);
-  if (code) url.searchParams.set("room", code);
-  else url.searchParams.delete("room");
-  history.replaceState({}, "", url);
+type Route = { page: "home" } | { page: "join"; code: string } | { page: "game"; code: string };
+
+/** Path-based routing: `/` home, `/join` join, `/game?room=CODE` play. A bare `/`
+ *  (even with a legacy `?room`) is always home. */
+function parseRoute(): Route {
+  const code = (new URLSearchParams(location.search).get("room") ?? "").toUpperCase();
+  if (location.pathname === "/game") return { page: "game", code };
+  if (location.pathname === "/join") return { page: "join", code };
+  return { page: "home" };
 }
 
 export function App() {
-  // `joined` = the room the player has committed to (drives the room view).
-  const [joined, setJoined] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>(parseRoute);
   const [name, setName] = useState(getStoredName());
-  const [roomParam, setRoomParam] = useState<string | null>(roomFromUrl());
-  const [probing, setProbing] = useState<boolean>(!!roomParam);
 
-  // Landing on a shared link: if I'm ALREADY a player in this room, enter directly
-  // (reconnect to a game/lobby in progress). Otherwise fall through to the join
-  // screen with the code pre-filled. (No spectator mode — non-players just see the
-  // landing; joining an in-progress game is rejected server-side as before.)
+  // Keep the route in sync with browser back/forward.
   useEffect(() => {
-    if (joined || !roomParam) {
-      setProbing(false);
-      return;
-    }
-    let alive = true;
-    setProbing(true);
-    fetchRoomInfo(roomParam, getPlayerId())
-      .then((info) => {
-        if (!alive) return;
-        if (info.exists && info.isPlayer) {
-          setRoomUrl(roomParam);
-          setJoined(roomParam);
-        }
-      })
-      .finally(() => alive && setProbing(false));
-    return () => {
-      alive = false;
-    };
-  }, [roomParam, joined]);
+    const onPop = () => setRoute(parseRoute());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
-  const enter = (c: string) => {
-    setStoredName(name.trim());
-    const code = c.toUpperCase();
-    setRoomUrl(code);
-    setJoined(code);
-  };
-  const goHome = () => {
-    setRoomUrl(null);
-    setRoomParam(null);
-    setJoined(null);
+  const go = (path: string) => {
+    history.pushState({}, "", path);
+    setRoute(parseRoute());
   };
 
-  if (joined) return <RoomView code={joined} name={name.trim()} onLeave={goHome} />;
-  if (probing) {
+  if (route.page === "game" && route.code) {
+    return <GameRoute code={route.code} name={name.trim()} go={go} />;
+  }
+  if (route.page === "join") {
     return (
       <div className="app">
-        <div className="panel">
-          <p className="muted">Loading game…</p>
-        </div>
+        <JoinPage
+          name={name}
+          setName={setName}
+          initialCode={route.code}
+          onJoin={(c) => {
+            const code = c.toUpperCase();
+            setStoredName(name.trim());
+            markRoomJoined(code);
+            go(`/game?room=${code}`);
+          }}
+        />
       </div>
     );
   }
   return (
     <div className="app">
-      <Landing
+      <HomePage
         name={name}
         setName={setName}
-        initialCode={roomParam ?? ""}
-        onHost={async () => enter(await createRoom())}
-        onJoin={enter}
+        onHost={async () => {
+          setStoredName(name.trim());
+          const code = await createRoom();
+          markRoomJoined(code);
+          go(`/game?room=${code}`);
+        }}
+        onJoinNav={() => go("/join")}
       />
     </div>
   );
 }
 
-function RoomView({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {
+/** `/game?room=CODE`: only render the room if this browser officially joined this
+ *  code (host or join). Otherwise (someone shared the game URL, not the invite
+ *  link) bounce to `/join` for the same code. */
+function GameRoute({ code, name, go }: { code: string; name: string; go: (path: string) => void }) {
+  const joined = isRoomJoined(code);
+  useEffect(() => {
+    if (!joined) go(`/join?room=${code}`);
+  }, [joined, code, go]);
+  if (!joined) return null;
+  return (
+    <RoomView
+      code={code}
+      name={name}
+      onLeave={() => {
+        clearRoomJoined(code);
+        go("/");
+      }}
+      onJoinFailed={() => {
+        clearRoomJoined(code); // stale marker (room gone / started / full)
+        go("/");
+      }}
+    />
+  );
+}
+
+function RoomView({
+  code,
+  name,
+  onLeave,
+  onJoinFailed,
+}: {
+  code: string;
+  name: string;
+  onLeave: () => void;
+  onJoinFailed: () => void;
+}) {
   const room = useRoom(code, name);
-  const { state, connected } = room;
+  const { state, connected, joinError } = room;
+
+  // The server rejected us before we ever joined (room gone / started / full) —
+  // clear the stale marker and head home with the notice.
+  useEffect(() => {
+    if (joinError) onJoinFailed();
+  }, [joinError, onJoinFailed]);
+
   const inGame = !!state && (state.phase === "playing" || state.phase === "pending");
   return (
     <div className={`app${inGame ? " app-game" : ""}`}>

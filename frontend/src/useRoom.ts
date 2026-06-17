@@ -16,6 +16,7 @@ import {
 
 const PLAYER_ID_KEY = "upwords:playerId";
 const NAME_KEY = "upwords:name";
+const JOINED_ROOMS_KEY = "upwords:joinedRooms";
 
 export function getPlayerId(): string {
   let id = localStorage.getItem(PLAYER_ID_KEY);
@@ -31,6 +32,30 @@ export function getStoredName(): string {
 }
 export function setStoredName(name: string): void {
   localStorage.setItem(NAME_KEY, name);
+}
+
+/** Local record of which room codes this browser has officially joined/hosted.
+ *  Drives the /game gate: landing on a game URL you never joined sends you to
+ *  /join for that code (e.g. someone shared the game link, not the invite link). */
+function joinedRooms(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(JOINED_ROOMS_KEY) ?? "[]");
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+export function isRoomJoined(code: string): boolean {
+  return joinedRooms().includes(code.toUpperCase());
+}
+export function markRoomJoined(code: string): void {
+  const c = code.toUpperCase();
+  const rooms = joinedRooms();
+  if (!rooms.includes(c)) localStorage.setItem(JOINED_ROOMS_KEY, JSON.stringify([...rooms, c].slice(-10)));
+}
+export function clearRoomJoined(code: string): void {
+  const c = code.toUpperCase();
+  localStorage.setItem(JOINED_ROOMS_KEY, JSON.stringify(joinedRooms().filter((r) => r !== c)));
 }
 
 /** POST /room → new room code. */
@@ -78,6 +103,7 @@ export interface RoomConn {
   state: PublicState | null;
   connected: boolean;
   notice: string | null; // transient: errors, move applied/rejected
+  joinError: string | null; // set if the server rejected us before we ever joined
   applied: AppliedEvent | null; // last committed move (for animations)
   rejectSignal: number; // bumped on each move_rejected (for the tumble animation)
   me: string; // this client's playerId
@@ -106,6 +132,10 @@ export function useRoom(code: string | null, name: string): RoomConn {
   const [notice, setNotice] = useState<string | null>(null);
   const [applied, setApplied] = useState<AppliedEvent | null>(null);
   const [rejectSignal, setRejectSignal] = useState(0);
+  // Set when the server rejects us before we ever joined (room gone/started/full)
+  // — lets the /game route clear a stale "joined" marker and bounce home.
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const everJoined = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const closedByUs = useRef(false);
   const prevCurrentId = useRef<string | undefined>(undefined);
@@ -134,6 +164,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
         const msg = JSON.parse(e.data) as ServerMessage;
         switch (msg.type) {
           case "state": {
+            everJoined.current = true; // we're in — any later error isn't a join failure
             // Detect the turn passing to me (it wasn't my turn before) → chime.
             const cur = msg.game.players[msg.game.turnSeat]?.id;
             if (msg.game.phase === "playing" && cur === me && prevCurrentId.current && prevCurrentId.current !== me) {
@@ -192,6 +223,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
             break;
           case "error":
             setNotice(msg.message);
+            if (!everJoined.current) setJoinError(msg.message); // rejected before joining
             break;
         }
       });
@@ -220,6 +252,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
     state,
     connected,
     notice,
+    joinError,
     applied,
     rejectSignal,
     me,

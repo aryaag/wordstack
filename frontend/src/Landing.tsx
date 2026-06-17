@@ -5,23 +5,29 @@ import { Icon, Tile } from "./lib";
 const LOGO = "WORDSTACK".split("");
 const RAISED: Record<number, number> = { 0: 2, 4: 3 }; // index → height badge + raised edge
 
-export function Landing({
+function Logo() {
+  return (
+    <div className="logo">
+      {LOGO.map((l, i) => (
+        <Tile key={i} letter={l} height={RAISED[i] ?? 1} />
+      ))}
+    </div>
+  );
+}
+
+/** Home (`/`): name + prominent Host, with a muted Join that routes to /join. */
+export function HomePage({
   name,
   setName,
-  initialCode = "",
   onHost,
-  onJoin,
+  onJoinNav,
 }: {
   name: string;
   setName: (n: string) => void;
-  initialCode?: string; // pre-filled from a shared ?room= link
-  onHost: () => void;
-  onJoin: (code: string) => void;
+  onHost: () => void | Promise<void>;
+  onJoinNav: () => void;
 }) {
-  const [code, setCode] = useState(initialCode.toUpperCase());
   const [busy, setBusy] = useState(false);
-  const fromLink = !!initialCode;
-
   const host = async () => {
     setBusy(true);
     try {
@@ -33,11 +39,51 @@ export function Landing({
 
   return (
     <div className="landing">
-      <div className="logo">
-        {LOGO.map((l, i) => (
-          <Tile key={i} letter={l} height={RAISED[i] ?? 1} />
-        ))}
-      </div>
+      <Logo />
+      <p className="tagline">Stack letters, climb words</p>
+      <p className="sub">
+        A 10×10 word game where tiles stack up
+        <br />
+        and taller words score higher.
+      </p>
+
+      <input
+        className="field"
+        placeholder="Your name"
+        value={name}
+        maxLength={16}
+        onChange={(e) => setName(e.target.value)}
+        style={{ marginBottom: name.trim() ? 14 : 6 }}
+      />
+      {!name.trim() && <p className="muted" style={{ margin: "0 0 12px" }}>Enter a name to host or join.</p>}
+      <button className="cta primary" onClick={host} disabled={busy || !name.trim()}>
+        <Icon name="plus" /> Host a game
+      </button>
+      <button className="cta" style={{ marginTop: 10 }} onClick={onJoinNav}>
+        Join game
+      </button>
+    </div>
+  );
+}
+
+/** Join (`/join`, also the shareable invite link): name + code + Join. */
+export function JoinPage({
+  name,
+  setName,
+  initialCode = "",
+  onJoin,
+}: {
+  name: string;
+  setName: (n: string) => void;
+  initialCode?: string; // pre-filled from a shared /join?room= link
+  onJoin: (code: string) => void;
+}) {
+  const [code, setCode] = useState(initialCode.toUpperCase());
+  const fromLink = !!initialCode;
+
+  return (
+    <div className="landing">
+      <Logo />
       <p className="tagline">Stack letters, climb words</p>
       <p className="sub">
         {fromLink ? (
@@ -48,9 +94,9 @@ export function Landing({
           </>
         ) : (
           <>
-            A 10×10 word game where tiles stack up
+            Enter a friend’s game code
             <br />
-            and taller words score higher.
+            and your name to join.
           </>
         )}
       </p>
@@ -62,18 +108,8 @@ export function Landing({
         maxLength={16}
         autoFocus={fromLink}
         onChange={(e) => setName(e.target.value)}
-        style={{ marginBottom: name.trim() ? 14 : 6 }}
+        style={{ marginBottom: 14 }}
       />
-      {!name.trim() && <p className="muted" style={{ margin: "0 0 12px" }}>Enter a name to host or join.</p>}
-      <button className="cta primary" onClick={host} disabled={busy || !name.trim()}>
-        <Icon name="plus" /> Host a game
-      </button>
-
-      <div className="or">
-        <div />
-        <span>or join with a code</span>
-        <div />
-      </div>
       <input
         className="code-input"
         placeholder="CODE"
@@ -82,7 +118,7 @@ export function Landing({
         onChange={(e) => setCode(e.target.value.toUpperCase())}
       />
       <button
-        className={`cta${fromLink ? " primary" : ""}`}
+        className="cta primary"
         style={{ marginTop: 10 }}
         disabled={!code.trim() || !name.trim()}
         onClick={() => onJoin(code.trim())}
@@ -98,7 +134,7 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
   const [copied, setCopied] = useState(false);
   if (!state) return null;
   const isHost = state.hostId === me;
-  const inviteLink = `${location.origin}/?room=${state.code}`;
+  const inviteLink = `${location.origin}/join?room=${state.code}`;
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(inviteLink);
