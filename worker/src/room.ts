@@ -2,6 +2,7 @@ import {
   applyPlacement,
   DEFAULT_CONFIG,
   draw,
+  duplicateWords,
   endgamePenalty,
   extractWords,
   makeEmptyBoard,
@@ -28,6 +29,7 @@ const WINDOW_MS = 30_000; // open stage: auto-accept countdown
 const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
 const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
 const SKIP_MS = 120_000; // auto-skip a disconnected current player's turn after this
+const REMATCH_MS = 15_000; // how long a rematch offer stays open for votes
 const MAX_REJECTS_PER_TURN = 2; // after this many upheld challenges in a turn, skip the player
 const CLEANUP_MS = 24 * 60 * 60_000; // delete a finished/abandoned room's storage after this
 const LOBBY_TTL_MS = 6 * 60 * 60_000; // delete a created-but-never-started lobby after this
@@ -126,6 +128,7 @@ export class Room {
   /** The single DO Alarm serves phase-exclusive purposes:
    *  - pending           → challenge-window backstop (auto-accept / tally)
    *  - playing           → auto-skip a disconnected current player's turn
+   *  - rematch_pending   → tally the rematch vote after 15s
    *  - lobby / gameover  → delete the room's storage once everyone has left */
   async alarm(): Promise<void> {
     await this.serialize(async () => {
@@ -134,6 +137,10 @@ export class Room {
       if (s.pending) {
         if (s.pending.stage === "open") await this.commitMove(); // no challenge → auto-accept
         else await this.finishReview(); // backstop: unvoted counts as allow
+        return;
+      }
+      if (s.phase === "rematch_pending") {
+        await this.tallyRematch(s);
         return;
       }
       if (s.phase === "playing") {
@@ -173,6 +180,8 @@ export class Room {
         return this.onPass(ws);
       case "rematch":
         return this.onRematch(ws);
+      case "rematch_vote":
+        return this.onRematchVote(ws, msg.vote);
       case "swap_tiles":
         return this.onSwap(ws, msg.index);
       case "leave":
@@ -220,6 +229,9 @@ export class Room {
     if (s.phase !== "lobby") return this.send(ws, { type: "error", message: "game already started" });
     if (s.players.length < 2) return this.send(ws, { type: "error", message: "need at least 2 players" });
 
+    // Randomize the seating completely — ignore host and join order.
+    shuffle(s.players);
+    s.players.forEach((p, i) => (p.seat = i));
     s.seed = Math.floor(Math.random() * 0xffffffff);
     let bag = newShuffledBag(s.seed);
     for (const p of s.players) {
@@ -230,32 +242,79 @@ export class Room {
     s.bag = bag;
     s.phase = "playing";
     s.turnSeat = Math.floor(Math.random() * s.players.length); // randomize who goes first
+    s.firstSeat = s.turnSeat; // fix the player-strip order to this game's play order
     s.turnStartedAt = Date.now();
+    s.gameStartedAt = Date.now();
     s.rejectsThisTurn = 0;
     s.consecutivePasses = 0;
     await this.armTurnTimer(s);
     await this.persistAndBroadcast();
   }
 
-  /** Replay with the same table: reset board/scores/history and deal fresh racks.
-   *  Players who left are dropped; survivors keep their identity, re-seated. */
+  /** A player offers a rematch: open a 15s vote. The offerer is an automatic
+   *  "yes"; the game restarts (with only the yes-voters) when the timer tallies. */
   private async onRematch(ws: WebSocket): Promise<void> {
     const s = this.requireState(ws);
     if (!s) return;
     if (s.phase !== "gameover") {
       return this.send(ws, { type: "error", message: "no finished game to rematch" });
     }
-    const survivors = s.players.filter((p) => !p.left);
-    if (survivors.length < 2) {
+    const pid = this.playerIdOf(ws);
+    if (!pid || !s.players.some((p) => p.id === pid && !p.left)) {
+      return this.send(ws, { type: "error", message: "not in this game" });
+    }
+    if (s.players.filter((p) => !p.left).length < 2) {
       return this.send(ws, { type: "error", message: "need at least 2 players to rematch" });
     }
-    survivors.forEach((p, i) => {
+    const deadline = Date.now() + REMATCH_MS;
+    s.phase = "rematch_pending";
+    s.rematch = { by: pid, votes: { [pid]: "yes" }, deadline };
+    await this.ctx.storage.setAlarm(deadline);
+    await this.persistAndBroadcast();
+  }
+
+  /** Record a player's yes/no on an open rematch offer. */
+  private async onRematchVote(ws: WebSocket, vote: "yes" | "no"): Promise<void> {
+    const s = this.requireState(ws);
+    if (!s) return;
+    if (s.phase !== "rematch_pending" || !s.rematch) {
+      return this.send(ws, { type: "error", message: "no rematch in progress" });
+    }
+    const pid = this.playerIdOf(ws);
+    if (!pid || !s.players.some((p) => p.id === pid && !p.left)) return;
+    s.rematch.votes[pid] = vote;
+    await this.persistAndBroadcast();
+  }
+
+  /** Timer ran out on a rematch offer: start a fresh game with the yes-voters,
+   *  or cancel and tell the table if nobody else wanted one. */
+  private async tallyRematch(s: GameState): Promise<void> {
+    const rematch = s.rematch;
+    s.rematch = null;
+    const yes = s.players.filter((p) => !p.left && rematch?.votes[p.id] === "yes");
+    if (yes.length >= 2) {
+      this.startFreshGame(s, yes);
+      await this.armTurnTimer(s);
+      await this.persistAndBroadcast();
+    } else {
+      s.phase = "gameover";
+      await this.ctx.storage.setAlarm(Date.now() + CLEANUP_MS);
+      this.broadcast({ type: "rematch_cancelled", reason: "No one else wanted a rematch." });
+      await this.persistAndBroadcast();
+    }
+  }
+
+  /** Reset board/scores/history and deal fresh racks for a new game with the
+   *  given players (re-seated in randomized order). */
+  private startFreshGame(s: GameState, players: PlayerState[]): void {
+    shuffle(players);
+    players.forEach((p, i) => {
       p.seat = i;
       p.score = 0;
       p.rack = [];
     });
-    s.players = survivors;
-    s.hostId = survivors.some((p) => p.id === s.hostId) ? s.hostId : survivors[0].id;
+    s.players = players;
+    s.hostId = players.some((p) => p.id === s.hostId) ? s.hostId : players[0].id;
     s.board = makeEmptyBoard(CONFIG.boardSize);
     s.boardMeta = {};
     s.history = [];
@@ -269,16 +328,16 @@ export class Room {
     s.bag = bag;
     s.phase = "playing";
     s.turnSeat = Math.floor(Math.random() * s.players.length);
+    s.firstSeat = s.turnSeat;
     s.turnStartedAt = Date.now();
+    s.gameStartedAt = Date.now();
+    s.gameEndedAt = 0;
     s.rejectsThisTurn = 0;
     s.consecutivePasses = 0;
     s.pending = null;
     s.draft = null;
     s.endReason = null;
     s.scored = false;
-    await this.ctx.storage.deleteAlarm(); // cancel the post-game cleanup alarm
-    await this.armTurnTimer(s);
-    await this.persistAndBroadcast();
   }
 
   private async onSubmit(ws: WebSocket, placed: PlacedTile[]): Promise<void> {
@@ -294,10 +353,35 @@ export class Room {
     if (!placement.ok) return this.send(ws, { type: "error", message: placement.reason });
 
     // Word validity (including "is this just a trivial plural/past tense?") is
-    // decided by human challenge, never by the engine. The only thing we flag is
-    // informational — whether a word has been played before (see history).
+    // decided by human challenge, never by the engine. Words already played this
+    // game (same letters) score nothing and are flagged with who first played them.
     const words = extractWords(s.board, placed);
     const score = scoreTurn(words, placed, CONFIG);
+
+    const playedBy = new Map<string, string>(); // lowercased word → first player to play it
+    for (const rec of s.history)
+      for (const w of rec.words) {
+        const lw = w.word.toLowerCase();
+        if (!playedBy.has(lw)) playedBy.set(lw, rec.name);
+      }
+    const dups = duplicateWords(score.perWord, new Set(playedBy.keys()));
+    const pendingWords = score.perWord.map((w) =>
+      dups.has(w.word.toLowerCase())
+        ? { word: w.word, points: 0, duplicate: true, firstBy: playedBy.get(w.word.toLowerCase()) }
+        : { word: w.word, points: w.points },
+    );
+
+    // Every word is a repeat → reject outright (never a turn, no voting).
+    if (pendingWords.length > 0 && pendingWords.every((w) => w.duplicate)) {
+      s.draft = null;
+      this.broadcast({ type: "move_rejected", reason: duplicateReason(pendingWords) });
+      await this.persistAndBroadcast();
+      return;
+    }
+
+    const dupPoints = score.perWord
+      .filter((w) => dups.has(w.word.toLowerCase()))
+      .reduce((sum, w) => sum + w.points, 0);
     const stances: PendingMove["stances"] = {};
     for (const p of s.players) if (p.id !== player.id) stances[p.id] = "pending";
 
@@ -305,8 +389,8 @@ export class Room {
     s.pending = {
       submitterId: player.id,
       placed,
-      words: score.perWord.map((w) => ({ word: w.word, points: w.points })),
-      totalPoints: score.total,
+      words: pendingWords,
+      totalPoints: score.total - dupPoints,
       bingoBonus: score.bingoBonus,
       stage: "open",
       deadline,
@@ -509,7 +593,9 @@ export class Room {
     s.scored = applyPenalty;
     s.pending = null;
     s.draft = null;
+    s.rematch = null;
     s.endReason = reason;
+    s.gameEndedAt = Date.now();
     await this.ctx.storage.setAlarm(Date.now() + CLEANUP_MS); // self-destruct once everyone's gone
     this.broadcast({ type: "game_over", reason });
     await this.persistAndBroadcast();
@@ -577,16 +663,20 @@ export class Room {
     const pending = s.pending!;
     await this.ctx.storage.deleteAlarm();
     const submitter = s.players.find((p) => p.id === pending.submitterId)!;
-    // The (longest) word each placed tile is part of — computed on the pre-move board.
+    // The across + down word each placed tile is part of — on the pre-move board.
     const formed = extractWords(s.board, pending.placed);
-    const wordFor = (row: number, col: number) =>
-      formed
-        .filter((w) => w.cells.some((c) => c.row === row && c.col === col))
-        .sort((a, b) => b.word.length - a.word.length)[0]?.word ?? "";
+    const wordFor = (row: number, col: number, orientation: "across" | "down") =>
+      formed.find(
+        (w) => w.orientation === orientation && w.cells.some((c) => c.row === row && c.col === col),
+      )?.word;
     s.board = applyPlacement(s.board, pending.placed);
     for (const p of pending.placed) {
       const k = `${p.row},${p.col}`;
-      (s.boardMeta[k] ??= []).push({ by: submitter.id, word: wordFor(p.row, p.col) });
+      (s.boardMeta[k] ??= []).push({
+        by: submitter.id,
+        across: wordFor(p.row, p.col, "across"),
+        down: wordFor(p.row, p.col, "down"),
+      });
     }
     submitter.rack = removeTiles(submitter.rack, pending.placed);
     submitter.score += pending.totalPoints;
@@ -599,6 +689,7 @@ export class Room {
       name: submitter.name,
       words: pending.words,
       total: pending.totalPoints,
+      tiles: pending.placed.length,
     });
     s.pending = null;
     s.phase = "playing";
@@ -749,6 +840,7 @@ function freshLobby(code: string): GameState {
     bag: [],
     seed: 0,
     turnSeat: 0,
+    firstSeat: 0,
     turnStartedAt: 0,
     rejectsThisTurn: 0,
     consecutivePasses: 0,
@@ -758,7 +850,30 @@ function freshLobby(code: string): GameState {
     endReason: null,
     scored: false,
     draft: null,
+    gameStartedAt: 0,
+    gameEndedAt: 0,
+    rematch: null,
   };
+}
+
+/** In-place Fisher–Yates shuffle. */
+function shuffle<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+/** Human-readable "already played" message for a rejected all-duplicate move. */
+function duplicateReason(words: { word: string; firstBy?: string }[]): string {
+  const up = (w: string) => w.toUpperCase();
+  if (words.length === 1) {
+    const w = words[0];
+    return `${up(w.word)} has been played before${w.firstBy ? ` by ${w.firstBy}` : ""}.`;
+  }
+  const names = words.map((w) => up(w.word));
+  const list = `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+  return `The words ${list} were played before.`;
 }
 
 function toPublic(s: GameState): PublicState {
