@@ -466,50 +466,47 @@ interface Superlative {
   label: string;
   value: string;
   who?: string;
+  /** Optional breakdown revealed behind an "i" toggle. */
+  detail?: { words: { word: string; points: number }[]; letter?: string };
 }
 
-/** Fun end-of-game stats derived from the final board + move history (with the
- *  player responsible, where it can be attributed). */
+/** Fun end-of-game stats derived from the move history (with the player
+ *  responsible). Tallest stack is omitted — it's always max height by endgame. */
 function superlatives(state: PublicState): Superlative[] {
   const out: Superlative[] = [];
-  const nameOf = (id?: string) => state.players.find((p) => p.id === id)?.name;
 
-  // Tallest stack on the board (attributed to whoever placed its top tile).
-  let tallest = 0;
-  let tallestKey = "";
-  for (let r = 0; r < state.board.length; r++)
-    for (let c = 0; c < state.board[r].length; c++)
-      if (state.board[r][c].length > tallest) {
-        tallest = state.board[r][c].length;
-        tallestKey = `${r},${c}`;
-      }
-  if (tallest >= 2) {
-    const layers = state.boardMeta[tallestKey];
-    out.push({ icon: "🗼", label: "Tallest stack", value: `${tallest} high`, who: nameOf(layers?.[layers.length - 1]?.by) });
-  }
-
-  // Best (highest-scoring) and longest words; best turn; best single-tile play.
   let best: { word: string; points: number; who?: string } | null = null;
   let longest: { word: string; who?: string } = { word: "" };
-  let bestTurn: { total: number; who?: string } | null = null;
-  let bestSolo: { total: number; who?: string } | null = null;
+  let bestTurn: TurnRecord | null = null;
+  let bestSolo: TurnRecord | null = null;
   for (const rec of state.history) {
     for (const w of rec.words) {
       if (!best || w.points > best.points) best = { word: w.word, points: w.points, who: rec.name };
       if (w.word.length > longest.word.length) longest = { word: w.word, who: rec.name };
     }
-    if (!bestTurn || rec.total > bestTurn.total) bestTurn = { total: rec.total, who: rec.name };
-    if (rec.tiles === 1 && (!bestSolo || rec.total > bestSolo.total))
-      bestSolo = { total: rec.total, who: rec.name };
+    if (!bestTurn || rec.total > bestTurn.total) bestTurn = rec;
+    if (rec.tiles === 1 && (!bestSolo || rec.total > bestSolo.total)) bestSolo = rec;
   }
   if (best && best.points > 0)
     out.push({ icon: "⭐", label: "Top word", value: `${displayLetter(best.word)} · +${best.points}`, who: best.who });
   if (longest.word.length >= 4 && longest.word.toLowerCase() !== best?.word.toLowerCase())
     out.push({ icon: "📏", label: "Longest word", value: displayLetter(longest.word), who: longest.who });
   if (bestTurn && bestTurn.total > 0)
-    out.push({ icon: "🔥", label: "Best turn", value: `+${bestTurn.total}`, who: bestTurn.who });
+    out.push({
+      icon: "🔥",
+      label: "Best turn",
+      value: `+${bestTurn.total}`,
+      who: bestTurn.name,
+      detail: { words: bestTurn.words },
+    });
   if (bestSolo && bestSolo.total > 0)
-    out.push({ icon: "🎯", label: "Top 1-tile play", value: `+${bestSolo.total}`, who: bestSolo.who });
+    out.push({
+      icon: "🎯",
+      label: "Top 1-tile play",
+      value: `+${bestSolo.total}`,
+      who: bestSolo.name,
+      detail: { words: bestSolo.words, letter: bestSolo.placed?.[0] },
+    });
   return out;
 }
 
@@ -552,6 +549,8 @@ export function EndScreen({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const [openStat, setOpenStat] = useState<string | null>(null);
 
   // Surface notices that arrive while on the end screen (e.g. rematch cancelled).
   const [toast, setToast] = useState<string | null>(null);
@@ -602,13 +601,40 @@ export function EndScreen({
       {stats.length > 0 && (
         <div className="superlatives">
           {stats.map((s) => (
-            <div key={s.label} className="superlative">
-              <span className="sl-icon">{s.icon}</span>
-              <span className="sl-label">{s.label}</span>
-              <span className="sl-value">
-                {s.value}
-                {s.who ? <span className="sl-who"> · {s.who}</span> : null}
-              </span>
+            <div key={s.label} className="superlative-wrap">
+              <div className="superlative">
+                <span className="sl-icon">{s.icon}</span>
+                <span className="sl-label">{s.label}</span>
+                <span className="sl-value">
+                  {s.value}
+                  {s.who ? <span className="sl-who"> · {s.who}</span> : null}
+                </span>
+                {s.detail && (
+                  <button
+                    className={`sl-info${openStat === s.label ? " on" : ""}`}
+                    onClick={() => setOpenStat(openStat === s.label ? null : s.label)}
+                    aria-label={`${s.label} details`}
+                  >
+                    i
+                  </button>
+                )}
+              </div>
+              {s.detail && openStat === s.label && (
+                <div className="sl-detail">
+                  {s.detail.letter && (
+                    <span className="sl-detail-tile">
+                      Tile <b>{displayLetter(s.detail.letter)}</b>
+                    </span>
+                  )}
+                  <span className="sl-detail-words">
+                    {s.detail.words.map((w, i) => (
+                      <span key={i} className="sl-detail-word">
+                        {displayLetter(w.word)} <span className="muted">+{w.points}</span>
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>

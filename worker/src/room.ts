@@ -690,6 +690,7 @@ export class Room {
       words: pending.words,
       total: pending.totalPoints,
       tiles: pending.placed.length,
+      placed: pending.placed.map((p) => p.letter),
     });
     s.pending = null;
     s.phase = "playing";

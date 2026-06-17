@@ -33,6 +33,8 @@ export interface TurnRecord {
   total: number;
   /** How many tiles were placed this turn (drives the "highest 1-tile play" stat). */
   tiles: number;
+  /** The letters placed this turn (e.g. to show the tile of a top 1-tile play). */
+  placed?: string[];
 }
 
 export type PendingStage = "open" | "review";
