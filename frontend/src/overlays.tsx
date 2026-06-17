@@ -541,6 +541,10 @@ export function EndScreen({
   const stats = superlatives(state);
   const medal = (i: number) => (i === 0 ? " 🏆" : i === 1 ? " 🥈" : "");
   const duration = state.gameStartedAt > 0 && state.gameEndedAt > 0 ? state.gameEndedAt - state.gameStartedAt : 0;
+  // Total tiles each player placed across the game.
+  const tilesByPlayer = new Map<string, number>();
+  for (const rec of state.history)
+    tilesByPlayer.set(rec.playerId, (tilesByPlayer.get(rec.playerId) ?? 0) + (rec.tiles ?? rec.placed?.length ?? 0));
 
   // Win / lose sting on entry (only for a real, scored finish — not a cancel).
   useEffect(() => {
@@ -580,12 +584,16 @@ export function EndScreen({
           // Show the leftover-tile penalty only when it was actually applied.
           const leftover = p.rack.length;
           const penalized = state.scored && leftover > 0;
+          const tilesPlayed = tilesByPlayer.get(p.id) ?? 0;
           return (
             <li key={p.id}>
-              <b>
-                {p.name}
-                {medal(i)}
-              </b>
+              <span className="end-player">
+                <b>
+                  {p.name}
+                  {medal(i)}
+                </b>
+                <span className="muted small end-tiles">{tilesPlayed} tiles played</span>
+              </span>
               <span style={{ marginLeft: "auto", textAlign: "right" }}>
                 <span className="pscore-end">{p.score} pts</span>
                 {penalized && (

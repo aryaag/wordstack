@@ -599,6 +599,14 @@ svg {
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
 }
+.end-player {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.end-tiles {
+  font-size: 11px;
+}
 .pscore-end {
   display: block;
   font-weight: 500;
