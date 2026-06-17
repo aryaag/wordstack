@@ -1631,21 +1631,24 @@ svg {
 .sl-label {
   color: var(--text-soft);
 }
-.sl-value {
+.sl-right {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sl-value {
   font-weight: 700;
 }
 .sl-info {
   flex: none;
   width: 20px;
   height: 20px;
-  margin-left: 2px;
   border-radius: 5px;
   border: 1px solid var(--line-strong);
   background: var(--bg-app);
   color: var(--text-soft);
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-weight: 700;
   font-size: 12px;
   line-height: 1;

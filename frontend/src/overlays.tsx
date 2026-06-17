@@ -605,19 +605,21 @@ export function EndScreen({
               <div className="superlative">
                 <span className="sl-icon">{s.icon}</span>
                 <span className="sl-label">{s.label}</span>
-                <span className="sl-value">
-                  {s.value}
-                  {s.who ? <span className="sl-who"> · {s.who}</span> : null}
+                <span className="sl-right">
+                  {s.detail && (
+                    <button
+                      className={`sl-info${openStat === s.label ? " on" : ""}`}
+                      onClick={() => setOpenStat(openStat === s.label ? null : s.label)}
+                      aria-label={`${s.label} details`}
+                    >
+                      i
+                    </button>
+                  )}
+                  <span className="sl-value">
+                    {s.value}
+                    {s.who ? <span className="sl-who"> · {s.who}</span> : null}
+                  </span>
                 </span>
-                {s.detail && (
-                  <button
-                    className={`sl-info${openStat === s.label ? " on" : ""}`}
-                    onClick={() => setOpenStat(openStat === s.label ? null : s.label)}
-                    aria-label={`${s.label} details`}
-                  >
-                    i
-                  </button>
-                )}
               </div>
               {s.detail && openStat === s.label && (
                 <div className="sl-detail">
