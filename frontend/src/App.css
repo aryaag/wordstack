@@ -245,6 +245,14 @@ svg {
   align-items: center;
   justify-content: center;
 }
+/* Once the first move lands, the center start markers fade to the background. */
+.cell-empty.center.faded {
+  background: transparent;
+  border-color: var(--line);
+}
+.cell-empty.center.faded::after {
+  opacity: 0.12;
+}
 
 /* ── Board + players ──────────────────────────────────────────────────── */
 .play-area {
@@ -697,6 +705,14 @@ svg {
 }
 .wordcard.challenged {
   background: var(--warn-bg);
+}
+/* A word already played this game: scores 0, no define/challenge. */
+.wordcard.duplicate {
+  opacity: 0.7;
+}
+.wordcard.duplicate .pill {
+  background: var(--bg-soft);
+  color: var(--text-faint);
 }
 .wordcard .tiles {
   display: flex;
@@ -1285,9 +1301,8 @@ svg {
   height: 38px;
   font-size: 14px;
 }
-.pcell.active .av {
-  box-shadow: 0 0 0 2px var(--info-fg);
-}
+/* The active player's turn is shown by the single depleting TurnRing (below),
+   not a static border. */
 .pscore-mini {
   font-size: 11px;
   font-weight: 600;
@@ -1575,6 +1590,24 @@ svg {
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+.turn-ring circle {
+  stroke: var(--info-fg);
+  transition: stroke-dashoffset 1s linear;
+}
+/* Final minute: pulse the ring to warn the clock is running out. */
+.turn-ring.pulsing circle {
+  stroke: var(--warn-fg);
+  animation: turn-ring-pulse 1s ease-in-out infinite;
+}
+@keyframes turn-ring-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
 
 /* End-screen superlatives. */
 .superlatives {
@@ -1601,6 +1634,29 @@ svg {
 .sl-value {
   margin-left: auto;
   font-weight: 700;
+}
+.sl-who {
+  font-weight: 500;
+  color: var(--text-soft);
+}
+.end-meta {
+  margin-top: -4px;
+}
+/* End-screen action buttons: a small gap between Rematch and Back to home. */
+.end-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.rematch-pop h3 {
+  margin: 0 0 6px;
+}
+.rematch-pop .confirm-btns {
+  margin-top: 14px;
+}
+.end-toast {
+  margin: 0 auto 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

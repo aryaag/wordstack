@@ -7,7 +7,7 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
-import { haptic, playPlace, playTick } from "./sound";
+import { haptic, playPlace, playRecall, playTick } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
@@ -75,6 +75,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   // A move committed → float a "+score" over the board.
   useEffect(() => {
     if (!room.applied) return;
+    lastPendingRef.current = new Map(); // move resolved — don't tumble it on a later reject
     setScorePop({ points: room.applied.points, bingo: room.applied.bingo, id: room.applied.at });
     const t = setTimeout(() => setScorePop(null), 1400);
     return () => clearTimeout(t);
@@ -105,11 +106,16 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     lastPendingRef.current = new Map(pending.placed.map((p) => [cellKey(p.row, p.col), p.letter]));
   }, [pending]);
 
-  // A move was rejected → tumble the placed tiles off and shake the board.
+  // A move was rejected → tumble the placed tiles off and shake the board. Also
+  // return any still-staged tiles to the rack (e.g. an all-duplicate rejection
+  // that never became a pending move).
   useEffect(() => {
     if (!room.rejectSignal) return;
+    setStaged(new Map());
+    setSelected(null);
     if (lastPendingRef.current.size) {
       setTumble(new Map(lastPendingRef.current));
+      lastPendingRef.current = new Map(); // consumed — don't replay on the next reject
       const tt = setTimeout(() => setTumble(null), 600);
       const st = setTimeout(() => setBoardShake(false), 450);
       setBoardShake(true);
@@ -174,7 +180,14 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     const stack = state.board[r][c];
     if (!stack.length) return;
     const meta = state.boardMeta[cellKey(r, c)] ?? [];
-    setInspect(stack.map((letter, idx) => ({ letter, by: meta[idx]?.by, word: meta[idx]?.word })));
+    setInspect(
+      stack.map((letter, idx) => ({
+        letter,
+        by: meta[idx]?.by,
+        across: meta[idx]?.across ?? meta[idx]?.word, // legacy layers stored a single `word`
+        down: meta[idx]?.down,
+      })),
+    );
   };
 
   const mapToPlaced = (m: Map<string, Staged>): PlacedTile[] =>
@@ -240,6 +253,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     const m = new Map(staged);
     m.delete(source.key);
     stageTiles(m);
+    playRecall();
+    haptic(10);
     setSelected(null);
   };
 
@@ -259,13 +274,17 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       m.delete(source.key);
       stageTiles(m);
     }
+    playRecall(); // local-only feedback (rearrange or recall) — never broadcast
+    haptic(10);
     setSelected(null);
   };
 
   // Pointer-based drag (works for touch + mouse). A press that never moves past
   // the threshold is left alone so the existing tap handlers still fire.
   const beginDrag = (source: DragSource, letter: string, e: ReactPointerEvent) => {
-    if (!isMyTurn) return;
+    // Off-turn you can still rearrange your own rack (rack-source drags only);
+    // board placement stays gated to your turn (enforced in onUp below).
+    if (!isMyTurn && source.kind !== "rack") return;
     e.preventDefault();
     const start = { x: e.clientX, y: e.clientY };
     let moved = false;
@@ -292,8 +311,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
       const cell = el?.closest("[data-cell]")?.getAttribute("data-cell");
       const slotAttr = el?.closest("[data-rack-slot]")?.getAttribute("data-rack-slot");
-      if (cell) dropOnCell(source, letter, cell);
-      else if (slotAttr != null) dropOnSlot(source, Number(slotAttr));
+      if (cell) {
+        if (isMyTurn) dropOnCell(source, letter, cell); // off-turn: can't place on the board
+      } else if (slotAttr != null) dropOnSlot(source, Number(slotAttr));
       else if (el?.closest("[data-rack]")) dropOnRack(source);
     };
 
@@ -359,6 +379,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
             <Board
               board={state.board}
               overlay={overlay}
+              started={state.history.length > 0}
               hoverCell={hoverCell}
               onCell={onCell}
               onTilePointerDown={
@@ -388,8 +409,11 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
             </div>
             <div className="rack" data-rack key={rackKey}>
-              {slots.map((ri, slotIdx) =>
-                ri === null ? (
+              {slots.map((ri, slotIdx) => {
+                // Guard against a stale `slots` entry pointing past a shrunken rack
+                // (happens for one render after the bag empties) — render it empty.
+                const letter = ri == null ? undefined : myRack[ri];
+                return letter == null || ri == null ? (
                   <div key={slotIdx} className="rack-slot empty" data-rack-slot={slotIdx} />
                 ) : (
                   <div
@@ -399,21 +423,21 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                     style={{ animationDelay: `${slotIdx * 35}ms` }}
                   >
                     <Tile
-                      letter={myRack[ri]}
+                      letter={letter}
                       selected={ri === selected}
                       dim={used.has(ri)}
                       tappable={isMyTurn}
-                      draggable={isMyTurn && !used.has(ri)}
+                      draggable={!used.has(ri)}
                       onClick={isMyTurn ? () => onRackTap(ri) : undefined}
                       onPointerDown={
-                        isMyTurn && !used.has(ri)
-                          ? (e) => beginDrag({ kind: "rack", rackIndex: ri, slot: slotIdx }, myRack[ri], e)
+                        !used.has(ri)
+                          ? (e) => beginDrag({ kind: "rack", rackIndex: ri, slot: slotIdx }, letter, e)
                           : undefined
                       }
                     />
                   </div>
-                ),
-              )}
+                );
+              })}
             </div>
             {isMyTurn && (
               <div className="actions">

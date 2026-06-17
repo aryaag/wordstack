@@ -68,7 +68,12 @@ function blip({ freq, to, type = "triangle", dur = 0.08, gain = 0.12, delay = 0 
 export function playPlace(height = 1): void {
   const h = Math.max(1, Math.min(height, 5));
   const base = 200 + (h - 1) * 72;
-  blip({ freq: base, to: base * 0.62, type: "triangle", dur: 0.07, gain: 0.14 });
+  blip({ freq: base, to: base * 0.62, type: "triangle", dur: 0.07, gain: 0.24 });
+}
+
+/** Soft reverse "tock" when a tile is pulled back to the rack or rearranged. */
+export function playRecall(): void {
+  blip({ freq: 150, to: 230, type: "triangle", dur: 0.06, gain: 0.16 });
 }
 
 /** Big ascending arpeggio when a player uses all 7 tiles (bingo, +20). */

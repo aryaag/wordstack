@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
-import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, playedWords, Tile, TimerRing } from "./lib";
+import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
 import { playLose, playWin } from "./sound";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
@@ -11,35 +11,40 @@ const colorOf = (p?: PlayerState) => (p ? AVATAR_COLORS[p.seat % 4] : FALLBACK);
 export interface InspectLayer {
   letter: string;
   by?: string;
-  word?: string;
+  across?: string;
+  down?: string;
 }
 
 const whenLabel = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
 
-/** Thin progress ring around the active player's avatar (soft turn pace, ~2 min). */
-const TURN_SOFT_MS = 600_000;
+/** Single ring around the active player's avatar showing time LEFT in the turn:
+ *  it starts full and depletes counter-clockwise, pulsing in the final minute. */
+const TURN_SOFT_MS = 600_000; // 10 min soft turn limit
+const TURN_PULSE_MS = 60_000; // pulse in the last minute
 function TurnRing({ startedAt }: { startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(iv);
   }, []);
-  const frac = Math.min(1, Math.max(0, (now - startedAt) / TURN_SOFT_MS));
+  const remainingMs = Math.max(0, TURN_SOFT_MS - (now - startedAt));
+  const frac = remainingMs / TURN_SOFT_MS; // 1 = full ring, 0 = empty
   const r = 22;
   const circ = 2 * Math.PI * r;
+  const pulsing = remainingMs <= TURN_PULSE_MS;
   return (
-    <svg className="turn-ring" width="48" height="48" viewBox="0 0 48 48" aria-hidden>
+    <svg className={`turn-ring${pulsing ? " pulsing" : ""}`} width="48" height="48" viewBox="0 0 48 48" aria-hidden>
       <circle
         cx="24"
         cy="24"
         r={r}
         fill="none"
-        stroke="var(--info-fg)"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeDasharray={circ.toFixed(1)}
         strokeDashoffset={(circ * (1 - frac)).toFixed(1)}
-        transform="rotate(-90 24 24)"
+        // rotate to start at top, mirror so it depletes counter-clockwise
+        transform="rotate(-90 24 24) scale(-1 1) translate(-48 0)"
       />
     </svg>
   );
@@ -49,12 +54,11 @@ function TurnRing({ startedAt }: { startedAt: number }) {
 export function PlayerStrip({ state, me, onHistory }: { state: PublicState; me: string; onHistory: () => void }) {
   const current = state.players[state.turnSeat];
   const names = state.players.map((p) => p.name);
-  // During play, order the circles by turn order starting from whoever plays
-  // next (leftmost), so you can read off who's still to come this round.
   const inPlay = state.phase === "playing" || state.phase === "pending";
-  const ordered = inPlay
-    ? [...state.players.slice(state.turnSeat), ...state.players.slice(0, state.turnSeat)]
-    : state.players;
+  // Fix the circles to this game's play order — the player who took the first
+  // turn stays leftmost — so the strip doesn't reshuffle every turn.
+  const start = state.firstSeat ?? 0;
+  const ordered = [...state.players.slice(start), ...state.players.slice(0, start)];
   return (
     <div className="pstrip">
       {ordered.map((p) => {
@@ -192,7 +196,6 @@ export function TurnReview({
   const submitter = state.players.find((p) => p.id === pending.submitterId);
   const isSubmitter = pending.submitterId === me;
   const formed = extractWords(state.board, pending.placed);
-  const played = playedWords(state.history); // words from earlier turns → flag repeats
   const col = colorOf(submitter);
   const others = state.players.filter((p) => p.id !== pending.submitterId);
 
@@ -308,29 +311,37 @@ export function TurnReview({
         </div>
 
         <div className="wordlist">
-          {formed.map((w, i) => (
-            <div key={i} className="wordcard">
-              <div className="tiles">
-                {w.cells.map((cell, j) => (
-                  <Tile key={j} letter={cell.letter} height={cell.height} />
-                ))}
-              </div>
-              <div className="wordrow">
-                <span className="pill">+{pending.words[i]?.points ?? 0}</span>
-                {played.has(w.word) && <span className="repeat-badge">↻ played before</span>}
-                <div className="word-actions">
-                  <button className="text-btn define" onClick={() => setDefineWord(w.word)}>
-                    <Icon name="book" size={15} /> Define
-                  </button>
-                  {!isSubmitter && (
-                    <button className="text-btn challenge" onClick={() => onChallenge(i)}>
-                      <Icon name="flag" size={15} /> Challenge
-                    </button>
+          {formed.map((w, i) => {
+            const pw = pending.words[i];
+            const dup = pw?.duplicate;
+            return (
+              <div key={i} className={`wordcard${dup ? " duplicate" : ""}`}>
+                <div className="tiles">
+                  {w.cells.map((cell, j) => (
+                    <Tile key={j} letter={cell.letter} height={cell.height} />
+                  ))}
+                </div>
+                <div className="wordrow">
+                  <span className="pill">+{pw?.points ?? 0}</span>
+                  {dup ? (
+                    // Already-played words score 0 and skip define/challenge.
+                    <span className="repeat-badge">↻ played before{pw?.firstBy ? ` by ${pw.firstBy}` : ""}</span>
+                  ) : (
+                    <div className="word-actions">
+                      <button className="text-btn define" onClick={() => setDefineWord(w.word)}>
+                        <Icon name="book" size={15} /> Define
+                      </button>
+                      {!isSubmitter && (
+                        <button className="text-btn challenge" onClick={() => onChallenge(i)}>
+                          <Icon name="flag" size={15} /> Challenge
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="divider" />
@@ -450,38 +461,79 @@ export function Reconnecting() {
   );
 }
 
-/** Fun end-of-game stats derived from the final board + move history. */
-function superlatives(state: PublicState): { icon: string; label: string; value: string }[] {
-  const out: { icon: string; label: string; value: string }[] = [];
-  // Tallest stack on the board.
-  let tallest = 0;
-  for (const row of state.board) for (const cell of row) tallest = Math.max(tallest, cell.length);
-  if (tallest >= 2) out.push({ icon: "🗼", label: "Tallest stack", value: `${tallest} high` });
+interface Superlative {
+  icon: string;
+  label: string;
+  value: string;
+  who?: string;
+}
 
-  // Best (highest-scoring) and longest words across all committed turns.
-  let best: { word: string; points: number } | null = null;
-  let longest = "";
-  for (const rec of state.history)
+/** Fun end-of-game stats derived from the final board + move history (with the
+ *  player responsible, where it can be attributed). */
+function superlatives(state: PublicState): Superlative[] {
+  const out: Superlative[] = [];
+  const nameOf = (id?: string) => state.players.find((p) => p.id === id)?.name;
+
+  // Tallest stack on the board (attributed to whoever placed its top tile).
+  let tallest = 0;
+  let tallestKey = "";
+  for (let r = 0; r < state.board.length; r++)
+    for (let c = 0; c < state.board[r].length; c++)
+      if (state.board[r][c].length > tallest) {
+        tallest = state.board[r][c].length;
+        tallestKey = `${r},${c}`;
+      }
+  if (tallest >= 2) {
+    const layers = state.boardMeta[tallestKey];
+    out.push({ icon: "🗼", label: "Tallest stack", value: `${tallest} high`, who: nameOf(layers?.[layers.length - 1]?.by) });
+  }
+
+  // Best (highest-scoring) and longest words; best turn; best single-tile play.
+  let best: { word: string; points: number; who?: string } | null = null;
+  let longest: { word: string; who?: string } = { word: "" };
+  let bestTurn: { total: number; who?: string } | null = null;
+  let bestSolo: { total: number; who?: string } | null = null;
+  for (const rec of state.history) {
     for (const w of rec.words) {
-      if (!best || w.points > best.points) best = { word: w.word, points: w.points };
-      if (w.word.length > longest.length) longest = w.word;
+      if (!best || w.points > best.points) best = { word: w.word, points: w.points, who: rec.name };
+      if (w.word.length > longest.word.length) longest = { word: w.word, who: rec.name };
     }
-  if (best) out.push({ icon: "⭐", label: "Top word", value: `${displayLetter(best.word)} · +${best.points}` });
-  if (longest.length >= 4 && longest.toLowerCase() !== best?.word.toLowerCase())
-    out.push({ icon: "📏", label: "Longest word", value: displayLetter(longest) });
+    if (!bestTurn || rec.total > bestTurn.total) bestTurn = { total: rec.total, who: rec.name };
+    if (rec.tiles === 1 && (!bestSolo || rec.total > bestSolo.total))
+      bestSolo = { total: rec.total, who: rec.name };
+  }
+  if (best && best.points > 0)
+    out.push({ icon: "⭐", label: "Top word", value: `${displayLetter(best.word)} · +${best.points}`, who: best.who });
+  if (longest.word.length >= 4 && longest.word.toLowerCase() !== best?.word.toLowerCase())
+    out.push({ icon: "📏", label: "Longest word", value: displayLetter(longest.word), who: longest.who });
+  if (bestTurn && bestTurn.total > 0)
+    out.push({ icon: "🔥", label: "Best turn", value: `+${bestTurn.total}`, who: bestTurn.who });
+  if (bestSolo && bestSolo.total > 0)
+    out.push({ icon: "🎯", label: "Top 1-tile play", value: `+${bestSolo.total}`, who: bestSolo.who });
   return out;
+}
+
+/** "Xm Ys" / "Ys" for a game's elapsed wall-clock time. */
+function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
 }
 
 // ── End screen (game over / canceled) ───────────────────────────────────────
 export function EndScreen({
   state,
   me,
+  notice,
   onRematch,
+  onRematchVote,
   onLeave,
 }: {
   state: PublicState;
   me: string;
+  notice?: string | null;
   onRematch: () => void;
+  onRematchVote: (vote: "yes" | "no") => void;
   onLeave: () => void;
 }) {
   const ranked = [...state.players].sort((a, b) => b.score - a.score);
@@ -490,6 +542,8 @@ export function EndScreen({
   const iWon = state.players.find((p) => p.id === me)?.score === topScore;
   const canRematch = state.players.filter((p) => !p.left).length >= 2;
   const stats = superlatives(state);
+  const medal = (i: number) => (i === 0 ? " 🏆" : i === 1 ? " 🥈" : "");
+  const duration = state.gameStartedAt > 0 && state.gameEndedAt > 0 ? state.gameEndedAt - state.gameStartedAt : 0;
 
   // Win / lose sting on entry (only for a real, scored finish — not a cancel).
   useEffect(() => {
@@ -499,20 +553,39 @@ export function EndScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Surface notices that arrive while on the end screen (e.g. rematch cancelled).
+  const [toast, setToast] = useState<string | null>(null);
+  const firstNotice = useRef(true);
+  useEffect(() => {
+    if (firstNotice.current) {
+      firstNotice.current = false;
+      return;
+    }
+    if (!notice) return;
+    setToast(notice);
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   return (
     <div className="panel" style={{ textAlign: "center" }}>
+      {toast && <div className="toast end-toast">{toast}</div>}
       <h2>Game over</h2>
       <p className="muted">{state.endReason ?? "The game has ended."}</p>
+      <p className="muted small end-meta">
+        Room {state.code}
+        {duration > 0 ? ` · ${formatDuration(duration)}` : ""}
+      </p>
       <ul className="players-list" style={{ textAlign: "left" }}>
-        {ranked.map((p) => {
+        {ranked.map((p, i) => {
           // Show the leftover-tile penalty only when it was actually applied.
           const leftover = p.rack.length;
           const penalized = state.scored && leftover > 0;
           return (
             <li key={p.id}>
               <b>
-                {p.score === topScore ? "🏆 " : ""}
                 {p.name}
+                {medal(i)}
               </b>
               <span style={{ marginLeft: "auto", textAlign: "right" }}>
                 <span className="pscore-end">{p.score} pts</span>
@@ -532,19 +605,87 @@ export function EndScreen({
             <div key={s.label} className="superlative">
               <span className="sl-icon">{s.icon}</span>
               <span className="sl-label">{s.label}</span>
-              <span className="sl-value">{s.value}</span>
+              <span className="sl-value">
+                {s.value}
+                {s.who ? <span className="sl-who"> · {s.who}</span> : null}
+              </span>
             </div>
           ))}
         </div>
       )}
-      {canRematch && (
-        <button className="cta primary" onClick={onRematch}>
-          Rematch
+      <div className="end-actions">
+        {canRematch && (
+          <button className="cta primary" onClick={onRematch} disabled={state.phase === "rematch_pending"}>
+            Rematch
+          </button>
+        )}
+        <button className="cta" onClick={onLeave}>
+          Back to home
         </button>
+      </div>
+      {state.phase === "rematch_pending" && state.rematch && (
+        <RematchPopup state={state} me={me} onVote={onRematchVote} />
       )}
-      <button className="cta" onClick={onLeave}>
-        Back to home
-      </button>
+    </div>
+  );
+}
+
+// ── Rematch vote popup (15s) ─────────────────────────────────────────────────
+function RematchPopup({
+  state,
+  me,
+  onVote,
+}: {
+  state: PublicState;
+  me: string;
+  onVote: (vote: "yes" | "no") => void;
+}) {
+  const rematch = state.rematch!;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(iv);
+  }, []);
+  const secs = Math.max(0, Math.ceil((rematch.deadline - now) / 1000));
+  const byName = state.players.find((p) => p.id === rematch.by)?.name ?? "Someone";
+  const yesCount = Object.values(rematch.votes).filter((v) => v === "yes").length;
+  const isPrompter = me === rematch.by;
+  const myVote = rematch.votes[me];
+
+  return (
+    <div className="scrim">
+      <div className="modal rematch-pop" style={{ textAlign: "center" }}>
+        {isPrompter ? (
+          <>
+            <h3>Rematch?</h3>
+            <p className="muted">Waiting for the table… {secs}s</p>
+            <p className="muted small">
+              {yesCount} in so far{yesCount < 2 ? " — need one more" : ""}
+            </p>
+          </>
+        ) : (
+          <>
+            <h3>{byName} wants a rematch</h3>
+            <p className="muted">Join the next game? {secs}s</p>
+            <div className="confirm-btns">
+              <button
+                className={`cta${myVote === "no" ? " danger" : ""}`}
+                onClick={() => onVote("no")}
+                disabled={myVote != null}
+              >
+                No
+              </button>
+              <button
+                className={`cta${myVote === "yes" ? " primary" : ""}`}
+                onClick={() => onVote("yes")}
+                disabled={myVote != null}
+              >
+                {myVote === "yes" ? "You're in ✓" : "Yes"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -594,7 +735,10 @@ export function StackInspector({
                       {initials(p?.name ?? "?")[0]}
                     </span>
                     {p?.name ?? "—"}
-                    {ly.word ? ` · in ${displayLetter(ly.word)}` : ""}
+                    {(() => {
+                      const ws = [ly.across, ly.down].filter(Boolean) as string[];
+                      return ws.length ? ` · in ${ws.map(displayLetter).join(" / ")}` : "";
+                    })()}
                   </div>
                 </div>
                 {isTop && h > 1 ? (

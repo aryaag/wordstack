@@ -16,6 +16,7 @@ export function Board({
   flash,
   tumble,
   shake = false,
+  started = false,
 }: {
   board: BoardT;
   overlay: Overlay;
@@ -29,6 +30,8 @@ export function Board({
   tumble?: Map<string, string> | null;
   /** Shake the whole board once (on rejection). */
   shake?: boolean;
+  /** True once the first move has been played — fades the center markers. */
+  started?: boolean;
 }) {
   const cells = [];
   for (let r = 0; r < 10; r++) {
@@ -76,7 +79,7 @@ export function Board({
           <div
             key={key}
             data-cell={key}
-            className={`cell-empty target${isCenter ? " center" : ""}${isHover ? " drop-hover" : ""}`}
+            className={`cell-empty target${isCenter ? " center" : ""}${isCenter && started ? " faded" : ""}${isHover ? " drop-hover" : ""}`}
             onClick={() => onCell(r, c)}
           />,
         );

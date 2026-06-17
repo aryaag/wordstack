@@ -90,6 +90,7 @@ export interface RoomConn {
   pass: () => void;
   swap: (index: number) => void;
   rematch: () => void;
+  rematchVote: (vote: "yes" | "no") => void;
   leave: () => void;
 }
 
@@ -186,6 +187,9 @@ export function useRoom(code: string | null, name: string): RoomConn {
           case "game_over":
             setNotice(msg.reason);
             break;
+          case "rematch_cancelled":
+            setNotice(msg.reason);
+            break;
           case "error":
             setNotice(msg.message);
             break;
@@ -228,6 +232,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
     pass: () => action({ type: "pass" }),
     swap: (index) => action({ type: "swap_tiles", index }),
     rematch: () => action({ type: "rematch" }),
+    rematchVote: (vote: "yes" | "no") => action({ type: "rematch_vote", vote }),
     leave: () => action({ type: "leave" }),
   };
 }
