@@ -36,3 +36,17 @@ export function extractWords(board: Board, placed: PlacedTile[]): FormedWord[] {
   }
   return words;
 }
+
+/**
+ * Of the words formed this turn, which were already played earlier in the game
+ * (matched case-insensitively, regardless of orientation). `played` is the set
+ * of previously-committed words, lowercased. Returns the lowercased duplicates.
+ */
+export function duplicateWords(formed: { word: string }[], played: Set<string>): Set<string> {
+  const dups = new Set<string>();
+  for (const w of formed) {
+    const lw = w.word.toLowerCase();
+    if (played.has(lw)) dups.add(lw);
+  }
+  return dups;
+}

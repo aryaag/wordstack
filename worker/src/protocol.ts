@@ -1,7 +1,7 @@
 // Shared room state + WebSocket message types (the Phase 5 frontend reuses these).
 import type { Board, PlacedTile, Tile } from "./engine";
 
-export type Phase = "lobby" | "playing" | "pending" | "gameover";
+export type Phase = "lobby" | "playing" | "pending" | "gameover" | "rematch_pending";
 
 export interface PlayerState {
   id: string;
@@ -19,6 +19,10 @@ export interface PlayerState {
 export interface PendingWord {
   word: string;
   points: number;
+  /** True if this exact word was already played earlier this game — it scores 0. */
+  duplicate?: boolean;
+  /** Name of the player who first played a duplicate word. */
+  firstBy?: string;
 }
 
 /** One committed turn, for the history panel (newest first in the UI). */
@@ -27,6 +31,8 @@ export interface TurnRecord {
   name: string;
   words: PendingWord[];
   total: number;
+  /** How many tiles were placed this turn (drives the "highest 1-tile play" stat). */
+  tiles: number;
 }
 
 export type PendingStage = "open" | "review";
@@ -55,6 +61,9 @@ export interface GameState {
   bag: Tile[];
   seed: number;
   turnSeat: number;
+  /** Seat that took the first turn this game — fixes the player-strip order so it
+   *  doesn't rotate each turn (the starter stays leftmost). */
+  firstSeat: number;
   /** Epoch ms when the current turn began — drives the soft turn-timer ring. */
   turnStartedAt: number;
   /** Upheld challenges against the current player this turn — at 2 they're skipped. */
@@ -71,11 +80,28 @@ export interface GameState {
   scored: boolean;
   /** Live, uncommitted tiles the current player is placing (not persisted). */
   draft: DraftPlacement | null;
+  /** Epoch ms when play began (this game / rematch) — for the end-screen duration. */
+  gameStartedAt: number;
+  /** Epoch ms when the game ended/cancelled. */
+  gameEndedAt: number;
+  /** Active 15s rematch vote (phase === "rematch_pending"), else null. */
+  rematch: RematchVote | null;
+}
+
+/** An in-progress rematch offer: the prompter, each player's vote, and the deadline. */
+export interface RematchVote {
+  by: string; // playerId who offered the rematch
+  votes: Record<string, "yes" | "no">;
+  deadline: number; // epoch ms when the vote auto-tallies
 }
 
 export interface LayerMeta {
   by: string; // playerId who placed this layer
-  word: string; // the (longest) word this tile was part of when played
+  /** The across/down word this tile was part of when played (each ≥2 letters).
+   *  Legacy layers may instead carry `word`; the client falls back to it. */
+  across?: string;
+  down?: string;
+  word?: string; // legacy single-word field (pre-both-words layers)
 }
 
 /** The current player's in-progress (uncommitted) tiles, shown live to everyone. */
@@ -110,6 +136,7 @@ export type ClientMessage =
   | { type: "pass" }
   | { type: "swap_tiles"; index: number }
   | { type: "rematch" }
+  | { type: "rematch_vote"; vote: "yes" | "no" }
   | { type: "leave" };
 
 export type ServerMessage =
@@ -120,4 +147,5 @@ export type ServerMessage =
   | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean; qu: boolean }
   | { type: "move_rejected"; reason: string }
   | { type: "game_over"; reason: string }
+  | { type: "rematch_cancelled"; reason: string }
   | { type: "error"; message: string };

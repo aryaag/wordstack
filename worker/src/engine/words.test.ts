@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractWords } from "./words";
+import { duplicateWords, extractWords } from "./words";
 import { emptyBoard, placeAcross, set } from "./testutil";
 
 describe("extractWords", () => {
@@ -46,5 +46,21 @@ describe("extractWords", () => {
     set(board, 0, 1, "i"); // pre-existing "hi", untouched this turn
     const words = extractWords(board, placeAcross(4, 4, ["o", "n"]));
     expect(words.map((w) => w.word)).toEqual(["on"]);
+  });
+});
+
+describe("duplicateWords", () => {
+  const played = new Set(["cat", "queen"]);
+  it("flags words already played, case-insensitively", () => {
+    expect([...duplicateWords([{ word: "CAT" }, { word: "dog" }], played)]).toEqual(["cat"]);
+  });
+  it("returns empty when nothing repeats", () => {
+    expect(duplicateWords([{ word: "dog" }, { word: "fish" }], played).size).toBe(0);
+  });
+  it("flags all when every word repeats", () => {
+    expect([...duplicateWords([{ word: "cat" }, { word: "queen" }], played)].sort()).toEqual([
+      "cat",
+      "queen",
+    ]);
   });
 });

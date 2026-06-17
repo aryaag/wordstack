@@ -15,7 +15,7 @@ export {
   maximalRuns,
   topTile,
 } from "./board";
-export { extractWords } from "./words";
+export { extractWords, duplicateWords } from "./words";
 export { validatePlacement } from "./placement";
 export { endgamePenalty, scoreTurn } from "./scoring";
 export type { TurnScore, WordScore } from "./scoring";
