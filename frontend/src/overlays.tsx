@@ -43,8 +43,8 @@ function TurnRing({ startedAt }: { startedAt: number }) {
         strokeLinecap="round"
         strokeDasharray={circ.toFixed(1)}
         strokeDashoffset={(circ * (1 - frac)).toFixed(1)}
-        // rotate to start at top, mirror so it depletes counter-clockwise
-        transform="rotate(-90 24 24) scale(-1 1) translate(-48 0)"
+        // start at 12 o'clock, mirror so it depletes counter-clockwise
+        transform="rotate(90 24 24) scale(-1 1) translate(-48 0)"
       />
     </svg>
   );
