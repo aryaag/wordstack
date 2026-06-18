@@ -69,7 +69,7 @@ npx wrangler d1 execute upwords-db --local --file migrations/0001_words.sql
 npx wrangler d1 execute upwords-db --file migrations/0001_words.sql        # remote
 
 # secrets / deploy
-CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN \
+CLOUDFLARE_API_TOKEN=<your-cloudflare-api-token> \
   npx wrangler secret put MW_KEY -c worker/wrangler.toml                   # Merriam-Webster key
 npx wrangler deploy -c worker/wrangler.toml                                # worker + assets
 ```
@@ -124,8 +124,8 @@ wrangler syntax evolves.
 
 ## Cloudflare access
 
-Cloudflare API key is available as `$CLOUDFLARE_API_TOKEN` in the
-shell — pass it to wrangler/curl via that variable, never hard-code it.
+Pass your Cloudflare API token to wrangler/curl via the `CLOUDFLARE_API_TOKEN`
+environment variable — never hard-code it.
 
 ## Build history (phases)
 
