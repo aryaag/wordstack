@@ -366,6 +366,46 @@ export function TurnReview({
 }
 
 // ── Definition modal (live Merriam-Webster lookup; informational only) ───────
+/** Shared renderer for an MW lookup result (loading / error / found / not-found). */
+function DefineResultView({ word, res, loading }: { word: string; res: DefineResult | null; loading: boolean }) {
+  return (
+    <div className="define-body">
+      {loading ? (
+        <p className="muted">Looking up…</p>
+      ) : res && "error" in res ? (
+        <p className="muted">{res.error}</p>
+      ) : res && res.found ? (
+        res.entries.map((e, i) => (
+          <div key={i} className="def-entry">
+            {(e.fl || e.labels.length > 0) && (
+              <div className="def-tags">
+                {e.fl && <span className="def-fl">{e.fl}</span>}
+                {e.labels.map((l, k) => (
+                  <span key={k} className="def-label">
+                    {l}
+                  </span>
+                ))}
+              </div>
+            )}
+            <ol className="def-list">
+              {e.defs.map((d, j) => (
+                <li key={j}>{d}</li>
+              ))}
+            </ol>
+          </div>
+        ))
+      ) : (
+        <>
+          <p className="muted">No dictionary entry found for “{displayLetter(word)}”.</p>
+          {res && !res.found && res.suggestions?.length ? (
+            <p className="muted small">Did you mean: {res.suggestions.join(", ")}?</p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 function DefineModal({ word, room, onClose }: { word: string; room?: string; onClose: () => void }) {
   const [res, setRes] = useState<DefineResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -399,42 +439,78 @@ function DefineModal({ word, room, onClose }: { word: string; room?: string; onC
           </button>
         </div>
 
-        <div className="define-body">
-          {loading ? (
-            <p className="muted">Looking up…</p>
-          ) : res && "error" in res ? (
-            <p className="muted">{res.error}</p>
-          ) : res && res.found ? (
-            res.entries.map((e, i) => (
-              <div key={i} className="def-entry">
-                {(e.fl || e.labels.length > 0) && (
-                  <div className="def-tags">
-                    {e.fl && <span className="def-fl">{e.fl}</span>}
-                    {e.labels.map((l, k) => (
-                      <span key={k} className="def-label">
-                        {l}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <ol className="def-list">
-                  {e.defs.map((d, j) => (
-                    <li key={j}>{d}</li>
-                  ))}
-                </ol>
-              </div>
-            ))
-          ) : (
-            <>
-              <p className="muted">No dictionary entry found for “{displayLetter(word)}”.</p>
-              {res && !res.found && res.suggestions?.length ? (
-                <p className="muted small">Did you mean: {res.suggestions.join(", ")}?</p>
-              ) : null}
-            </>
-          )}
-        </div>
+        <DefineResultView word={word} res={res} loading={loading} />
 
         <p className="muted small def-foot">Informational only — this doesn’t affect the vote.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Standalone dictionary lookup: type a word (≤10 letters, alphabetic) and look it
+ *  up in MW. Reachable any time from the rack tray, on or off your turn. */
+export function WordLookup({ room, onClose }: { room?: string; onClose: () => void }) {
+  const [input, setInput] = useState("");
+  const [word, setWord] = useState<string | null>(null); // the submitted word
+  const [res, setRes] = useState<DefineResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!word) return;
+    let alive = true;
+    setLoading(true);
+    setRes(null);
+    fetchDefinition(word, room)
+      .then((r) => alive && setRes(r))
+      .catch(() => alive && setRes({ word, error: "Could not reach the dictionary." }))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [word, room]);
+
+  const canSubmit = input.length >= 2;
+  const submit = () => {
+    if (canSubmit) setWord(input.toLowerCase());
+  };
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card define-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <span className="avatar def">
+            <Icon name="book" size={16} />
+          </span>
+          <div>
+            <p className="t">Dictionary</p>
+            <p className="s">Merriam-Webster</p>
+          </div>
+          <button className="icon-btn def-close" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+
+        <div className="lookup-row">
+          <input
+            className="field"
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value.replace(/[^a-zA-Z]/g, "").slice(0, 10))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Look up a word…"
+            maxLength={10}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="Word to look up"
+          />
+          <button className="cta lookup-go" onClick={submit} disabled={!canSubmit}>
+            Go
+          </button>
+        </div>
+
+        {word && <DefineResultView word={word} res={res} loading={loading} />}
       </div>
     </div>
   );

@@ -421,12 +421,43 @@ svg {
   }
 }
 .tray-turn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-soft);
 }
 .tray.active .tray-turn {
   color: var(--info-fg);
+}
+.lookup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-app);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.lookup-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.lookup-row .field {
+  flex: 1;
+}
+.lookup-go {
+  width: auto;
+  flex-shrink: 0;
+  padding: 0 18px;
 }
 .rack {
   display: flex;
