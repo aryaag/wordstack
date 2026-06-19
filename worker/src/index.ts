@@ -6,12 +6,10 @@ export { Room } from "./room";
 
 export interface Env {
   ASSETS: Fetcher;
-  DB: D1Database;
   ROOM: DurableObjectNamespace;
   MW_KEY?: string; // Merriam-Webster Collegiate API key (Worker secret)
   CREATE_LIMITER?: RateLimiter;
   WS_LIMITER?: RateLimiter;
-  VALIDATE_LIMITER?: RateLimiter;
   DEFINE_LIMITER?: RateLimiter;
 }
 
@@ -35,21 +33,6 @@ export default {
     // Health check — confirms the Worker (and its bindings) are live.
     if (url.pathname === "/health") {
       return Response.json({ ok: true, service: "upwords", ts: Date.now() });
-    }
-
-    // Word validity — pure D1 set membership. Caller passes the already-expanded
-    // ASCII string (the Qu tile is expanded to "qu" upstream).
-    if (url.pathname === "/validate") {
-      const limited = await enforce(request, env.VALIDATE_LIMITER);
-      if (limited) return limited;
-      const word = (url.searchParams.get("word") ?? "").trim().toLowerCase();
-      if (!/^[a-z]{2,}$/.test(word)) {
-        return Response.json({ error: "word must be 2+ letters a-z" }, { status: 400 });
-      }
-      const row = await env.DB.prepare("SELECT 1 FROM words WHERE word = ? LIMIT 1")
-        .bind(word)
-        .first();
-      return Response.json({ word, valid: row !== null });
     }
 
     // Definition lookup — live Merriam-Webster proxy. Called only when a player

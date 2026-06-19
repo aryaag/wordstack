@@ -13,7 +13,6 @@ original `upwords` name (see the naming gotcha below).
 | Frontend | React + Vite + TypeScript, served via Workers Assets |
 | Worker | Cloudflare Workers — HTTP API + static asset serving |
 | Game room | Cloudflare Durable Objects — one DO per room, authoritative state + WebSockets |
-| Lexicon DB | Cloudflare D1 (SQLite) — word validity only (`words` table), standalone `/validate` |
 | CLI / deploy | Wrangler v3 |
 
 All infrastructure is Cloudflare-only — no separate server, no Docker, no external DB.
@@ -27,14 +26,12 @@ upwords/
 │   └── vite.config.ts
 ├── worker/
 │   ├── src/
-│   │   ├── index.ts       # Worker: routing, /validate, /define MW proxy, static assets
+│   │   ├── index.ts       # Worker: routing, /define MW proxy, static assets
 │   │   ├── room.ts        # Durable Object: game state, WS fan-out, challenge/alarm logic
 │   │   ├── define.ts      # MW fetch + parse (shared by Worker route + DO)
 │   │   ├── protocol.ts    # Shared WS message + state types (source of truth)
 │   │   └── engine/        # Pure game engine (no I/O, fully unit-tested) + config.ts
 │   └── wrangler.toml
-├── scripts/build-wordlist.ts  # Reproducible lexicon pipeline (download→filter→seed)
-├── migrations/0001_words.sql  # D1 schema: words(word TEXT PRIMARY KEY)
 ├── docs/                  # Deep reference (see below)
 └── CLAUDE.md
 ```
@@ -63,11 +60,6 @@ npx vite --config frontend/vite.config.ts             # frontend dev server
 # tests
 npx vitest run                                        # engine unit tests
 
-# lexicon
-npx ts-node scripts/build-wordlist.ts                 # rebuild word list
-npx wrangler d1 execute upwords-db --local --file migrations/0001_words.sql
-npx wrangler d1 execute upwords-db --file migrations/0001_words.sql        # remote
-
 # secrets / deploy
 CLOUDFLARE_API_TOKEN=<your-cloudflare-api-token> \
   npx wrangler secret put MW_KEY -c worker/wrangler.toml                   # Merriam-Webster key
@@ -95,7 +87,6 @@ npx wrangler deploy -c worker/wrangler.toml                                # wor
 | Endgame tile penalty | −5 pts per leftover tile, default on |
 | Exchange | 1 tile only per turn |
 | Q tile | Combined `Qu` (stored as `"qu"`) |
-| Lexicon | SCOWL size 50–70 buckets (63,172 words seeded) |
 | Join | Non-empty name required (client + server); host leaving cancels the game |
 | UI target | **Mobile-first** — design for small touch screens, scale up to desktop |
 
@@ -109,15 +100,14 @@ Worker script, D1 `upwords-db`, the Room DO, `upwords:*` localStorage keys, the
 repo, and the `upwords.*.workers.dev` subdomain. **Don't rename these** — it would
 orphan DO storage and reset users.
 
-**Merriam-Webster compliance.** Never *persist* the MW response (no D1/DO/KV/file/
+**Merriam-Webster compliance.** Never *persist* the MW response (no DO/KV/file/
 log). A transient in-memory `defCache` in the DO (5-min TTL, lost on hibernation)
 is the only permitted exception. Full rule + rationale in
 [docs/architecture.md](docs/architecture.md).
 
-**D1 / Wrangler.** D1 is SQLite — avoid Postgres-specific SQL. `wrangler.toml` is
-safe to commit (no secrets); secrets go via `wrangler secret put`. Verify current
-Cloudflare docs for DO WebSocket hibernation, D1 bindings, and Workers Assets —
-wrangler syntax evolves.
+**Wrangler.** `wrangler.toml` is safe to commit (no secrets); secrets go via
+`wrangler secret put`. Verify current Cloudflare docs for DO WebSocket hibernation
+and Workers Assets — wrangler syntax evolves.
 
 **DO alarms, never `setTimeout`.** A single DO alarm is multiplexed by phase
 (challenge window / turn auto-skip / storage cleanup); alarms survive hibernation.
@@ -129,9 +119,9 @@ environment variable — never hard-code it.
 
 ## Build history (phases)
 
-1. Scaffold · 2. Lexicon pipeline · 3. Engine · 4. Durable Object room ·
-5. Frontend · 6. Define/Challenge (MW proxy) · 7. Polish (reconnection, endgame,
-swap/pass, edge cases, live deploy).
+1. Scaffold · 2. Engine · 3. Durable Object room · 4. Frontend ·
+5. Define/Challenge (MW proxy) · 6. Polish (reconnection, endgame, swap/pass,
+edge cases, live deploy).
 
-All seven phases are **complete and deployed** at
+All phases are **complete and deployed** at
 https://wordstack.aryaadarshagautam.com.

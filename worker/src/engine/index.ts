@@ -1,6 +1,6 @@
-// Pure Upwords game engine — no I/O, no Cloudflare runtime. Word validity is
+// Pure Wordstack game engine — no I/O, no Cloudflare runtime. Word validity is
 // decided by human challenge, not the engine; the engine never reaches the
-// network or D1 itself.
+// network itself.
 
 export * from "./types";
 export { CENTER_CELLS, DEFAULT_CONFIG } from "./config";

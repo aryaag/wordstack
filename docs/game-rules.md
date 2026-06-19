@@ -67,7 +67,7 @@ Total: 8 + 21 + 6 + 35 + 4 + 15 + 6 + 5 = **100** ✓
   1 tile exchange, not multiple.)
 
 ## Illegal words (from physical rulebook)
-The following are always invalid regardless of lexicon:
+The following are always invalid (the table can reject them by challenge):
 - Proper nouns (names of places or people)
 - Hyphenated words
 - Words requiring an apostrophe
@@ -87,11 +87,10 @@ After the game ends:
 
 ## Qu tile string representation
 The Qu tile occupies one cell but represents two characters. When extracting a
-word string for lookup or display, expand the Qu cell to `"qu"`. Example:
-Qu+E+E+N on 4 cells → string `"queen"`. The D1 lexicon stores normal ASCII words
-(`queen`, `quest`, etc.) — no special entries needed. The board data model stores
-the tile value as `"qu"` (lowercase two-char string) to distinguish it from
-separate Q and U tiles.
+word string for display, expand the Qu cell to `"qu"`. Example:
+Qu+E+E+N on 4 cells → string `"queen"`. The board data model stores the tile
+value as `"qu"` (lowercase two-char string) to distinguish it from separate Q and
+U tiles.
 
 ## Rack privacy
 The DO sends the full game state to every connected client. Each player's rack

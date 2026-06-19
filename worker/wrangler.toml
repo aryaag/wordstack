@@ -13,20 +13,14 @@ routes = [
 
 # Static frontend (built by Vite into frontend/dist), served via Workers Assets.
 # run_worker_first: the Worker runs first so it can own API/WS routes (/health,
-# /room/:code/ws, later /validate, /define) and delegate everything else to
-# env.ASSETS.fetch. not_found_handling=SPA makes unknown paths resolve to
-# index.html so client-side routes (e.g. /room/ABC123) work.
+# /room/:code/ws, /define) and delegate everything else to env.ASSETS.fetch.
+# not_found_handling=SPA makes unknown paths resolve to index.html so client-side
+# routes (e.g. /room/ABC123) work.
 [assets]
 directory = "../frontend/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = true
-
-# Lexicon DB (word validity only). Tables are created in Phase 2.
-[[d1_databases]]
-binding = "DB"
-database_name = "upwords-db"
-database_id = "6e812d7a-150a-435b-916c-a67827e7dc97"
 
 # One Durable Object per room: authoritative game state + hibernatable WebSockets.
 [[durable_objects.bindings]]
@@ -47,11 +41,6 @@ simple = { limit = 5, period = 60 }
 name = "WS_LIMITER"          # /room/:code/ws upgrades (lenient — allow reconnects)
 namespace_id = "1002"
 simple = { limit = 15, period = 10 }
-
-[[ratelimits]]
-name = "VALIDATE_LIMITER"    # /validate
-namespace_id = "1003"
-simple = { limit = 20, period = 10 }
 
 [[ratelimits]]
 name = "DEFINE_LIMITER"      # /define — protects the MW non-commercial daily quota

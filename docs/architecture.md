@@ -2,22 +2,12 @@
 
 These were decided up front — implement exactly these.
 
-## Word validity: human-consensus only; D1 lexicon backs just `/validate`
-> **Update (2026-06-12):** gameplay no longer uses the lexicon for validity at all
-> — word validity (and trivial plurals/past-tense) is decided entirely by human
-> challenge (see [challenge-flow.md](challenge-flow.md)). The D1 lexicon + `GET
-> /validate` endpoint remain as a standalone utility (and for any future tooling),
-> but the room/engine never query it.
-
-- `GET /validate` checks `words(word TEXT PRIMARY KEY)` in D1 — pure set
-  membership. Never call an external API to validate a word.
-- Lexicon: ~50,000–70,000 entries, SCOWL size 50–70 buckets, **must include
-  inflected forms** (`cats`, `running`, `taller`). SCOWL at these sizes is
-  lemma-heavy; the build step verifies/adds inflection coverage.
-- [`scripts/build-wordlist.ts`](../scripts/build-wordlist.ts) is reproducible:
-  download source → lowercase → dedup → filter → emit seed SQL. Source + license
-  documented in the repo. The frequency cutoff is a tunable knob.
-- Seeded with 63,172 SCOWL words.
+## Word validity: human-consensus only (no lexicon)
+Word validity — including trivial plurals/past-tense — is decided entirely by
+human challenge (see [challenge-flow.md](challenge-flow.md)). There is **no
+dictionary arbiter**: the engine never judges validity, and the app no longer
+ships a word lexicon. (A dead D1 lexicon + `GET /validate` endpoint existed
+historically but were removed once gameplay stopped using them.)
 
 ## Definitions: Merriam-Webster, live, never persisted
 - MW Collegiate Dictionary API:
@@ -55,10 +45,9 @@ These were decided up front — implement exactly these.
 > message — the early `protocol.ts` sketch that listed a `define` WS message is
 > superseded.
 
-## Live game state lives in the Durable Object, NOT D1
-- D1 holds only the word lexicon. All board/rack/bag/score/turn state lives in DO
-  storage. Authoritative `GameState` shape is in
-  [`worker/src/protocol.ts`](../worker/src/protocol.ts).
+## Live game state lives in the Durable Object
+- All board/rack/bag/score/turn state lives in DO storage. Authoritative
+  `GameState` shape is in [`worker/src/protocol.ts`](../worker/src/protocol.ts).
 - One DO per room, keyed by a short room code (6 chars). Worker routes
   `/room/:code/ws` → that DO.
 - DO uses the **hibernatable WebSocket API** and persists to DO storage so rooms

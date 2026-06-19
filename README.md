@@ -7,7 +7,6 @@ Real-time multiplayer web implementation of **Upwords** — the word game where 
 - **Frontend** — React + Vite + TypeScript, served via Workers Assets
 - **Worker** — Cloudflare Workers (HTTP API, MW definition proxy)
 - **Game rooms** — Cloudflare Durable Objects (one DO per room: authoritative state + WebSocket fan-out)
-- **Lexicon** — Cloudflare D1 (SQLite word list, ~50–70k entries)
 
 ## Quick start
 

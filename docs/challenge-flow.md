@@ -9,9 +9,8 @@ Default mode: `"challenge"`. Server config: `VALIDATION_MODE: "auto" |
 "challenge"` + `challengePenalty: boolean` (default `false`).
 
 ## Resolution is by HUMAN CONSENSUS — not the dictionary
-D1 is **never** consulted during gameplay (validity, including trivial
-plurals/past-tense, is entirely human-decided; the lexicon DB backs only the
-standalone `GET /validate` endpoint — see [architecture.md](architecture.md)). A
+There is no dictionary arbiter: validity, including trivial plurals/past-tense, is
+entirely human-decided (see [architecture.md](architecture.md)). A
 challenge does **not** reject instantly — it pauses the game into a review/vote,
 and the move plays only if **every** non-submitter allows it. Any single upheld
 challenge (a "not valid" vote) rejects the whole move.
@@ -42,8 +41,8 @@ non-submitter has actually voted (or the backstop fires).
 unvoted = allow):
 - **All allow** → `move_applied` (committed, scored, rack refilled).
 - **Any reject** → the entire move is rejected: the submitter takes the tiles back
-  and replays. The DO broadcasts `challenge_result` then `move_rejected`. No D1
-  check, no turn skip for the challenger.
+  and replays. The DO broadcasts `challenge_result` then `move_rejected`. No
+  dictionary check, no turn skip for the challenger.
 
 **Two upheld challenges → skip (added 2026-06-12).** The DO counts upheld
 rejections against the current player this turn (`rejectsThisTurn` in GameState,

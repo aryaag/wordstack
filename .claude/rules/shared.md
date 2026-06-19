@@ -1,9 +1,9 @@
 # Shared project guidance
 
-This is a hobby Cloudflare-based app for the word game Upwords. The stack is:
-- **Frontend**: Cloudflare Pages (static site)
+This is a hobby Cloudflare-based app for a stacking word game. The stack is:
+- **Frontend**: static site served via Workers Assets
 - **Backend**: Cloudflare Workers (API)
-- **Database**: Cloudflare D1 (SQLite-compatible)
+- **Game rooms**: Cloudflare Durable Objects (one per room)
 
 All infra is managed via `wrangler`. See `wrangler.toml` for project config. Before running wrangler commands, ensure you're logged in (`wrangler whoami`).
 
