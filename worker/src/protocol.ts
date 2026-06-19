@@ -88,6 +88,11 @@ export interface GameState {
   gameEndedAt: number;
   /** Active 15s rematch vote (phase === "rematch_pending"), else null. */
   rematch: RematchVote | null;
+  /** Server-only snapshot of the state at the start of the most recently
+   *  completed turn (set before each commit/pass/swap). The host can restore it
+   *  to undo that turn; cleared on restore, so two undos can't run back-to-back.
+   *  Never sent to clients (see `toPublic` → exposed as `canUndo`). */
+  undoSnapshot: GameState | null;
 }
 
 /** An in-progress rematch offer: the prompter, each player's vote, and the deadline. */
@@ -112,8 +117,12 @@ export interface DraftPlacement {
   placed: PlacedTile[];
 }
 
-/** What clients receive: full state minus the secret bag order/seed (only the count). */
-export type PublicState = Omit<GameState, "bag" | "seed"> & { bagCount: number };
+/** What clients receive: full state minus the secret bag order/seed (only the
+ *  count) and the server-only undo snapshot (exposed as a `canUndo` flag). */
+export type PublicState = Omit<GameState, "bag" | "seed" | "undoSnapshot"> & {
+  bagCount: number;
+  canUndo: boolean;
+};
 
 /** Minimal, parsed Merriam-Webster lookup result returned by GET /define.
  *  The raw MW payload is parsed in the Worker and discarded — never stored. */
@@ -137,6 +146,7 @@ export type ClientMessage =
   | { type: "vote_move"; vote: "allow" | "reject" }
   | { type: "pass" }
   | { type: "swap_tiles"; index: number }
+  | { type: "undo_move" }
   | { type: "rematch" }
   | { type: "rematch_vote"; vote: "yes" | "no" }
   | { type: "leave" };
@@ -148,6 +158,7 @@ export type ServerMessage =
   | { type: "challenge_result"; challenged: { word: string; by: string[] }[] }
   | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean; qu: boolean }
   | { type: "move_rejected"; reason: string }
+  | { type: "undo_applied"; reason: string }
   | { type: "game_over"; reason: string }
   | { type: "rematch_cancelled"; reason: string }
   | { type: "error"; message: string };

@@ -115,6 +115,7 @@ export interface RoomConn {
   vote: (vote: "allow" | "reject") => void;
   pass: () => void;
   swap: (index: number) => void;
+  undo: () => void;
   rematch: () => void;
   rematchVote: (vote: "yes" | "no") => void;
   leave: () => void;
@@ -209,6 +210,9 @@ export function useRoom(code: string | null, name: string): RoomConn {
             haptic([10, 30, 10]);
             setRejectSignal((n) => n + 1);
             break;
+          case "undo_applied":
+            setNotice(msg.reason); // host rolled the game back a turn
+            break;
           case "challenge_update":
             playChallenge(); // someone challenged a word — alert the table
             break;
@@ -264,6 +268,7 @@ export function useRoom(code: string | null, name: string): RoomConn {
     vote: (vote) => action({ type: "vote_move", vote }),
     pass: () => action({ type: "pass" }),
     swap: (index) => action({ type: "swap_tiles", index }),
+    undo: () => action({ type: "undo_move" }),
     rematch: () => action({ type: "rematch" }),
     rematchVote: (vote: "yes" | "no") => action({ type: "rematch_vote", vote }),
     leave: () => action({ type: "leave" }),

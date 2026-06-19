@@ -350,6 +350,11 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         </span>
         <span className="right">
           <span className="room">{state.code}</span>
+          {me === state.hostId && state.canUndo && phase === "playing" && (
+            <button className="icon-btn" onClick={() => room.undo()} aria-label="Undo last move">
+              <Icon name="undo" size={19} />
+            </button>
+          )}
           <button className="icon-btn" onClick={() => setConfirmLeave(true)} aria-label="Leave">
             <Icon name="leave" size={19} />
           </button>

@@ -187,6 +187,8 @@ export class Room {
         return this.onRematchVote(ws, msg.vote);
       case "swap_tiles":
         return this.onSwap(ws, msg.index);
+      case "undo_move":
+        return this.onUndo(ws);
       case "leave":
         return this.onLeave(ws);
       default:
@@ -341,6 +343,7 @@ export class Room {
     s.draft = null;
     s.endReason = null;
     s.scored = false;
+    s.undoSnapshot = null;
   }
 
   private async onSubmit(ws: WebSocket, placed: PlacedTile[]): Promise<void> {
@@ -510,6 +513,7 @@ export class Room {
    *  disconnect auto-skip. Ends the game once every player has passed in
    *  succession (one full round). */
   private async doPass(s: GameState): Promise<void> {
+    this.snapshotTurnStart(s); // a pass is a completed turn the host can undo
     s.consecutivePasses++;
     s.draft = null;
     this.rotateTurn(s);
@@ -530,6 +534,7 @@ export class Room {
     if (index < 0 || index >= player.rack.length) {
       return this.send(ws, { type: "error", message: "bad tile index" });
     }
+    this.snapshotTurnStart(s); // a swap is a completed turn the host can undo
     const removed = player.rack[index];
     const { drawn, bag } = draw(s.bag, 1);
     player.rack[index] = drawn[0];
@@ -539,6 +544,44 @@ export class Room {
     this.rotateTurn(s);
     await this.armTurnTimer(s);
     await this.persistAndBroadcast();
+  }
+
+  /** Host-only: roll the game back to the start of the previous turn. Allowed
+   *  only during normal play (never while a move is pending/under challenge). The
+   *  snapshot is consumed on restore, so two undos can't run back-to-back — a real
+   *  move/pass/swap has to happen first to capture a fresh one. */
+  private async onUndo(ws: WebSocket): Promise<void> {
+    const s = this.requireState(ws);
+    if (!s) return;
+    if (this.playerIdOf(ws) !== s.hostId) {
+      return this.send(ws, { type: "error", message: "only the host can undo" });
+    }
+    if (s.phase !== "playing") {
+      return this.send(ws, { type: "error", message: "can only undo during play" });
+    }
+    if (!s.undoSnapshot) {
+      return this.send(ws, { type: "error", message: "nothing to undo" });
+    }
+    const restored = s.undoSnapshot; // already normalized with undoSnapshot === null
+    restored.turnStartedAt = Date.now(); // restart the turn ring from now
+    this.state = restored;
+    this.broadcast({ type: "undo_applied", reason: "The host undid the last move." });
+    await this.armTurnTimer(restored);
+    await this.persistAndBroadcast();
+  }
+
+  /** Capture the current state as the "beginning of this turn" so the host can
+   *  undo back to it. Normalizes the clone to a clean turn start (no pending/draft,
+   *  phase playing, reject counter reset) and drops any nested snapshot so a
+   *  restore leaves nothing further to undo. Called before each turn-ending action. */
+  private snapshotTurnStart(s: GameState): void {
+    s.undoSnapshot = null; // don't nest the previous turn's snapshot inside this one
+    const snap = structuredClone(s);
+    snap.pending = null;
+    snap.draft = null;
+    snap.phase = "playing";
+    snap.rejectsThisTurn = 0;
+    s.undoSnapshot = snap;
   }
 
   /** An explicit, intentional departure (vs. a transient disconnect → `webSocketClose`). */
@@ -665,6 +708,7 @@ export class Room {
   private async commitMove(): Promise<void> {
     const s = this.state!;
     const pending = s.pending!;
+    this.snapshotTurnStart(s); // capture the pre-move turn start so the host can undo it
     await this.ctx.storage.deleteAlarm();
     const submitter = s.players.find((p) => p.id === pending.submitterId)!;
     // The across + down word each placed tile is part of — on the pre-move board.
@@ -858,6 +902,7 @@ function freshLobby(code: string): GameState {
     gameStartedAt: 0,
     gameEndedAt: 0,
     rematch: null,
+    undoSnapshot: null,
   };
 }
 
@@ -882,9 +927,9 @@ function duplicateReason(words: { word: string; firstBy?: string }[]): string {
 }
 
 function toPublic(s: GameState): PublicState {
-  const { bag, seed, ...rest } = s;
+  const { bag, seed, undoSnapshot, ...rest } = s;
   void seed;
-  return { ...rest, bagCount: bag.length };
+  return { ...rest, bagCount: bag.length, canUndo: undoSnapshot !== null };
 }
 
 function removeTiles(rack: Tile[], placed: PlacedTile[]): Tile[] {
