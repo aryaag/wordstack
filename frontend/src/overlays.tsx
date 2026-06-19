@@ -798,6 +798,7 @@ export function HistoryPanel({
   onClose: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   useEffect(() => {
     const id = requestAnimationFrame(() => setOpen(true));
     return () => cancelAnimationFrame(id);
@@ -805,6 +806,11 @@ export function HistoryPanel({
 
   const recs = [...history].reverse();
   const when = (i: number) => (i === 0 ? "just now" : `${i} turn${i > 1 ? "s" : ""} ago`);
+  // Filter on word text while keeping each turn's original index (= "turns ago").
+  const q = query.trim().toLowerCase();
+  const items = recs
+    .map((rec, i) => ({ rec, i }))
+    .filter(({ rec }) => !q || rec.words.some((w) => w.word.toLowerCase().includes(q)));
 
   return (
     <div className="scrim bottom" onClick={onClose}>
@@ -819,11 +825,23 @@ export function HistoryPanel({
             <Icon name="x" size={18} />
           </button>
         </div>
+        {recs.length > 0 && (
+          <input
+            className="history-search"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search words…"
+            aria-label="Search played words"
+          />
+        )}
         <div className="turns">
           {recs.length === 0 ? (
             <p className="empty">No turns played yet.</p>
+          ) : items.length === 0 ? (
+            <p className="empty">No words match.</p>
           ) : (
-            recs.map((rec, i) => {
+            items.map(({ rec, i }) => {
               const p = players.find((pl) => pl.id === rec.playerId);
               const col = colorOf(p);
               return (

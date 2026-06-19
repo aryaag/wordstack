@@ -1119,6 +1119,16 @@ svg {
   font-size: 12px;
   color: var(--text-faint);
 }
+.history-search {
+  width: calc(100% - 36px);
+  margin: 10px 18px 0;
+  padding: 9px 12px;
+  font-size: 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+  color: var(--text);
+}
 .turns {
   overflow: auto;
   padding: 8px 14px 22px;
