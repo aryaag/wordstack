@@ -9,7 +9,7 @@ import {
 import type { RoomConn } from "./useRoom";
 import { haptic, playPlace, playRecall } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
-import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, WordLookup, type InspectLayer } from "./overlays";
+import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
 
 interface Staged {
@@ -37,7 +37,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [slots, setSlots] = useState<(number | null)[]>([]);
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [lookupOpen, setLookupOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [ghost, setGhost] = useState<DragGhost | null>(null);
@@ -396,13 +395,8 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
           <div className={`tray${isMyTurn ? " active" : ""}`}>
             <div className="tray-turn">
-              <span>
-                {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
-                {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
-              </span>
-              <button className="lookup-btn" onClick={() => setLookupOpen(true)} aria-label="Look up a word">
-                <Icon name="book" size={15} /> Look up
-              </button>
+              {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
+              {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
             </div>
             <div className="rack" data-rack key={rackKey}>
               {slots.map((ri, slotIdx) => {
@@ -475,7 +469,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           onVote={room.vote}
         />
       )}
-      {lookupOpen && <WordLookup room={state.code} onClose={() => setLookupOpen(false)} />}
       {inspect && <StackInspector layers={inspect} players={state.players} onClose={() => setInspect(null)} />}
       {historyOpen && (
         <HistoryPanel history={state.history} players={state.players} onClose={() => setHistoryOpen(false)} />
