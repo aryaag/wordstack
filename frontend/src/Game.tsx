@@ -24,6 +24,40 @@ type DragSource = { kind: "rack"; rackIndex: number; slot: number } | { kind: "c
  *  slot holds a rack-tile index or null. Players can drag tiles between slots. */
 const RACK_SLOTS = 10;
 
+/** Re-map slot→rackIndex after the rack changes so the player's arrangement
+ *  survives a turn: tiles still in the rack keep their slot, played tiles leave
+ *  their slot empty, and newly drawn tiles fill the empty slots (left to right).
+ *  Matched by letter as a multiset (handles duplicate letters). */
+function reconcileSlots(
+  prev: (number | null)[],
+  oldRack: string[],
+  newRack: string[],
+): (number | null)[] {
+  const pool = new Map<string, number[]>(); // letter → available new rack indices
+  newRack.forEach((letter, i) => {
+    const arr = pool.get(letter);
+    if (arr) arr.push(i);
+    else pool.set(letter, [i]);
+  });
+  const next: (number | null)[] = new Array(RACK_SLOTS).fill(null);
+  // Keep each surviving tile where it already sits.
+  for (let s = 0; s < RACK_SLOTS; s++) {
+    const ri = prev[s];
+    if (ri == null) continue;
+    const avail = pool.get(oldRack[ri]);
+    if (avail && avail.length) next[s] = avail.shift()!;
+  }
+  // Drop the freshly drawn tiles into the empty slots, in rack order.
+  const leftover: number[] = [];
+  for (const arr of pool.values()) leftover.push(...arr);
+  leftover.sort((a, b) => a - b);
+  let li = 0;
+  for (let s = 0; s < RACK_SLOTS && li < leftover.length; s++) {
+    if (next[s] == null) next[s] = leftover[li++];
+  }
+  return next;
+}
+
 interface DragGhost {
   letter: string;
   x: number;
@@ -51,15 +85,17 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [boardShake, setBoardShake] = useState(false);
   const prevBoardRef = useRef<string[][][] | null>(null);
   const lastPendingRef = useRef<Map<string, string>>(new Map());
+  const prevRackRef = useRef<string[]>([]);
 
   const myPlayer = state?.players.find((p) => p.id === me);
   const rackKey = myPlayer ? myPlayer.rack.join(",") : "";
 
+  // Rack changed (a turn resolved): keep existing tiles in their slots and only
+  // fill empty slots with the newly drawn tiles — don't reshuffle the rack.
   useEffect(() => {
-    const indices = myPlayer ? myPlayer.rack.map((_, i) => i) : [];
-    const padded: (number | null)[] = [...indices];
-    while (padded.length < RACK_SLOTS) padded.push(null);
-    setSlots(padded);
+    const newRack = myPlayer?.rack ?? [];
+    setSlots((prev) => reconcileSlots(prev, prevRackRef.current, newRack));
+    prevRackRef.current = newRack;
     setStaged(new Map());
     setSelected(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -398,7 +434,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
             </div>
-            <div className="rack" data-rack key={rackKey}>
+            <div className="rack" data-rack>
               {slots.map((ri, slotIdx) => {
                 // Guard against a stale `slots` entry pointing past a shrunken rack
                 // (happens for one render after the bag empties) — render it empty.
