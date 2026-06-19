@@ -291,6 +291,17 @@ svg {
   width: 22%;
   height: 22%;
 }
+/* Read-only thumbnail of the final board on the game-over screen. The board
+   scales to this wrapper's width (cqi font sizing), so just constrain + lock it. */
+.board-snapshot {
+  max-width: 220px;
+  margin: 4px auto 12px;
+  pointer-events: none;
+}
+.board-snapshot .board {
+  gap: 1px;
+  padding: 4px;
+}
 .rail {
   display: flex;
   flex-direction: column;

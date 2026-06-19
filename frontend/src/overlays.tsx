@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
+import { Board } from "./board";
 import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
 import { playLose, playWin } from "./sound";
 
@@ -579,6 +580,11 @@ export function EndScreen({
         Room {state.code}
         {duration > 0 ? ` · ${formatDuration(duration)}` : ""}
       </p>
+      {state.history.length > 0 && (
+        <div className="board-snapshot">
+          <Board board={state.board} overlay={new Map()} started hoverCell={null} onCell={() => {}} />
+        </div>
+      )}
       <ul className="players-list" style={{ textAlign: "left" }}>
         {ranked.map((p, i) => {
           // Show the leftover-tile penalty only when it was actually applied.
