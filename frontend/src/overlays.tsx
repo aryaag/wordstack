@@ -3,7 +3,7 @@ import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
 import { Board } from "./board";
-import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, Tile, TimerRing } from "./lib";
+import { AVATAR_COLORS, avatarLabel, displayLetter, Icon, initials, Tile } from "./lib";
 import { playLose, playWin } from "./sound";
 
 const FALLBACK = { bg: "#D3D1C7", fg: "#444" };
@@ -203,11 +203,6 @@ export function TurnReview({
   const challengedIndices = new Set<number>();
   for (const list of Object.values(pending.challenges)) for (const i of list) challengedIndices.add(i);
 
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
   const [defineWord, setDefineWord] = useState<string | null>(null);
   const defineModal = defineWord && (
     <DefineModal word={defineWord} room={state.code} onClose={() => setDefineWord(null)} />
@@ -346,14 +341,9 @@ export function TurnReview({
         </div>
 
         <div className="divider" />
-        <div className="timerrow">
-          <TimerRing seconds={pending.deadline ? (pending.deadline - now) / 1000 : 0} />
-          <span>
-            No challenge? Accepted automatically
-            <br />
-            when the timer runs out.
-          </span>
-        </div>
+        <p className="muted small" style={{ textAlign: "center" }}>
+          No timer — the move is accepted once everyone okays it.
+        </p>
 
         {isSubmitter ? (
           <p className="muted" style={{ textAlign: "center" }}>

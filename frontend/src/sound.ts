@@ -97,11 +97,6 @@ export function playQu(): void {
   blip({ freq: 1319, to: 1760, type: "sine", dur: 0.12, gain: 0.09, delay: 0.08 });
 }
 
-/** Subtle tick for the final seconds of the accept countdown. */
-export function playTick(): void {
-  blip({ freq: 880, type: "square", dur: 0.03, gain: 0.05 });
-}
-
 /** Gentle two-note rise when it becomes your turn. */
 export function playYourTurn(): void {
   blip({ freq: 587, to: 660, type: "sine", dur: 0.11, gain: 0.11 }); // D5

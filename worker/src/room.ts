@@ -25,7 +25,6 @@ import { lookupDefinition } from "./define";
 import type { DefineResult } from "./protocol";
 
 const CONFIG = DEFAULT_CONFIG;
-const WINDOW_MS = 30_000; // open stage: auto-accept countdown
 const REVIEW_BACKSTOP_MS = 180_000; // review stage: hard cap so voting can't hang forever
 const DEFINE_TTL_MS = 5 * 60_000; // how long a cached definition stays warm in memory
 const SKIP_MS = 120_000; // auto-skip a disconnected current player's turn after this
@@ -121,12 +120,15 @@ export class Room {
         player.connected = false;
         await this.armTurnTimer(s); // if the current player just dropped, start the auto-skip clock
         await this.persistAndBroadcast();
+        // A drop during the open stage shouldn't stall a move that was only
+        // waiting on the now-gone player to accept.
+        if (s.phase === "pending" && s.pending?.stage === "open") await this.maybeCloseOpen();
       }
     });
   }
 
   /** The single DO Alarm serves phase-exclusive purposes:
-   *  - pending           → challenge-window backstop (auto-accept / tally)
+   *  - pending           → review-vote backstop (only armed once a challenge opens voting)
    *  - playing           → auto-skip a disconnected current player's turn
    *  - rematch_pending   → tally the rematch vote after 15s
    *  - lobby / gameover  → delete the room's storage once everyone has left */
@@ -135,8 +137,9 @@ export class Room {
       const s = this.state;
       if (!s) return;
       if (s.pending) {
-        if (s.pending.stage === "open") await this.commitMove(); // no challenge → auto-accept
-        else await this.finishReview(); // backstop: unvoted counts as allow
+        // Only the review stage arms an alarm now (the open stage has no timer —
+        // it waits for explicit acceptance). Unvoted at the backstop counts as allow.
+        await this.finishReview();
         return;
       }
       if (s.phase === "rematch_pending") {
@@ -385,7 +388,6 @@ export class Room {
     const stances: PendingMove["stances"] = {};
     for (const p of s.players) if (p.id !== player.id) stances[p.id] = "pending";
 
-    const deadline = Date.now() + WINDOW_MS;
     s.pending = {
       submitterId: player.id,
       placed,
@@ -393,7 +395,7 @@ export class Room {
       totalPoints: score.total - dupPoints,
       bingoBonus: score.bingoBonus,
       stage: "open",
-      deadline,
+      deadline: null, // open stage has no timer — it commits on explicit acceptance
       stances,
       challenges: {},
       votes: {},
@@ -401,14 +403,13 @@ export class Room {
     };
     s.draft = null;
     s.phase = "pending";
-    await this.ctx.storage.setAlarm(deadline);
+    await this.ctx.storage.deleteAlarm(); // no auto-accept countdown in the open stage
     await this.persist();
     this.broadcast({
       type: "move_pending",
       words: s.pending.words,
       totalPoints: s.pending.totalPoints,
       bingoBonus: s.pending.bingoBonus,
-      deadline,
     });
     this.broadcastState();
     await this.maybeCloseOpen();
@@ -602,12 +603,15 @@ export class Room {
   }
 
   // ── Challenge window resolution ────────────────────────────────────────────
-  /** Open stage: every non-submitter accepted (no challenge) → commit. */
+  /** Open stage: every present non-submitter accepted (no challenge) → commit.
+   *  With no auto-accept timer, a disconnected opponent must not stall the move —
+   *  so only connected, non-left players are required to accept (a player who isn't
+   *  watching can't challenge anyway, and reconnecting re-opens their popup). */
   private async maybeCloseOpen(): Promise<void> {
     const s = this.state;
     if (!s || s.phase !== "pending" || s.pending?.stage !== "open") return;
     const pending = s.pending;
-    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left);
+    const others = s.players.filter((p) => p.id !== pending.submitterId && !p.left && p.connected);
     if (others.every((p) => pending.stances[p.id] === "accepted")) await this.commitMove();
   }
 

@@ -800,17 +800,6 @@ svg {
   border-top: 1px solid var(--line);
   margin: 12px 0;
 }
-.timerrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.timerrow span {
-  font-size: 13px;
-  color: var(--text-soft);
-  line-height: 1.5;
-}
 .okay {
   width: 100%;
   text-align: center;

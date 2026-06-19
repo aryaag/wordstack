@@ -159,28 +159,3 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.
   }
 }
 
-/** 30s countdown ring (seconds remaining of total). */
-export function TimerRing({ seconds, total = 30 }: { seconds: number; total?: number }): JSX.Element {
-  const c = 2 * Math.PI * 16;
-  const off = c * (1 - Math.max(0, seconds) / total);
-  return (
-    <svg width="38" height="38" viewBox="0 0 38 38">
-      <circle cx="19" cy="19" r="16" fill="none" stroke="#E2DCCE" strokeWidth="3" />
-      <circle
-        cx="19"
-        cy="19"
-        r="16"
-        fill="none"
-        stroke="#0C447C"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray={c.toFixed(1)}
-        strokeDashoffset={off.toFixed(1)}
-        transform="rotate(-90 19 19)"
-      />
-      <text x="19" y="23" textAnchor="middle" fontSize="13" fontWeight="500" fill="#2C271C">
-        {Math.max(0, Math.ceil(seconds))}
-      </text>
-    </svg>
-  );
-}

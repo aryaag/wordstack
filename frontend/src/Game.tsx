@@ -7,7 +7,7 @@ import {
   type PlacedTile,
 } from "../../worker/src/engine";
 import type { RoomConn } from "./useRoom";
-import { haptic, playPlace, playRecall, playTick } from "./sound";
+import { haptic, playPlace, playRecall } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
 import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
@@ -125,21 +125,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       };
     }
   }, [room.rejectSignal]);
-
-  // Tick down the last few seconds of the open accept countdown.
-  const openDeadline = state?.phase === "pending" && state.pending?.stage === "open" ? state.pending.deadline : null;
-  useEffect(() => {
-    if (!openDeadline) return;
-    let last = -1;
-    const iv = setInterval(() => {
-      const secs = Math.ceil((openDeadline - Date.now()) / 1000);
-      if (secs >= 1 && secs <= 5 && secs !== last) {
-        last = secs;
-        playTick();
-      }
-    }, 250);
-    return () => clearInterval(iv);
-  }, [openDeadline]);
 
   // Announce the (randomly chosen) starting player once, when the game begins.
   const announcedStart = useRef(false);

@@ -46,7 +46,7 @@ export interface PendingMove {
   totalPoints: number;
   bingoBonus: number;
   stage: PendingStage;
-  deadline: number | null; // open: 30s auto-accept; review: backstop (timer paused in UI)
+  deadline: number | null; // open: null (commits on explicit acceptance, no timer); review: backstop
   stances: Record<string, "pending" | "accepted">; // open stage: per non-submitter
   challenges: Record<string, number[]>; // who challenged which word(s)
   votes: Record<string, "allow" | "reject">; // review stage: per non-submitter ("is the word valid?")
@@ -143,7 +143,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "state"; game: PublicState }
-  | { type: "move_pending"; words: PendingWord[]; totalPoints: number; bingoBonus: number; deadline: number }
+  | { type: "move_pending"; words: PendingWord[]; totalPoints: number; bingoBonus: number }
   | { type: "challenge_update"; playerId: string; wordIndex: number }
   | { type: "challenge_result"; challenged: { word: string; by: string[] }[] }
   | { type: "move_applied"; by: string; points: number; words: PendingWord[]; bingo: boolean; qu: boolean }
