@@ -182,7 +182,7 @@ async function main() {
   const m2 = S2.mark();
   S2.send({ type: "join", playerId: sId, name: "Rejoin" });
   const snap = await S2.waitFrom(m2, stateWith((g) => g.pending !== null), "reconnect snapshot has pending");
-  assert(snap.game.pending.deadline > Date.now(), "pending deadline is in the future");
+  assert(snap.game.pending.stage === "open", "reconnect snapshot shows the open stage");
   const m3 = S2.mark();
   S2.send({ type: "acknowledge_move" });
   await S2.waitFrom(m3, isType("move_applied"), "reconnected player accepts → applied");
