@@ -1,6 +1,6 @@
 # Wordstack docs
 
-Deep reference for the Wordstack game (codebase name: `upwords`). `CLAUDE.md` at
+Deep reference for the Wordstack game. `CLAUDE.md` at
 the repo root stays lean — stack, structure, commands, conventions, gotchas — and
 links here for the detail.
 

@@ -14,9 +14,9 @@ import {
   playYourTurn,
 } from "./sound";
 
-const PLAYER_ID_KEY = "upwords:playerId";
-const NAME_KEY = "upwords:name";
-const JOINED_ROOMS_KEY = "upwords:joinedRooms";
+const PLAYER_ID_KEY = "wordstack:playerId";
+const NAME_KEY = "wordstack:name";
+const JOINED_ROOMS_KEY = "wordstack:joinedRooms";
 
 export function getPlayerId(): string {
   let id = localStorage.getItem(PLAYER_ID_KEY);

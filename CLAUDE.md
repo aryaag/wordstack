@@ -1,10 +1,8 @@
 # Wordstack — Claude Code Guide
 
-Real-time multiplayer web implementation of **Upwords** — the Scrabble-like board
-game where tiles stack on top of each other to change words. 2–4 players share a
-room and take turns; stack height determines scoring. Everything runs on
-Cloudflare. User-facing brand is **Wordstack**; the codebase/infra keep the
-original `upwords` name (see the naming gotcha below).
+**Wordstack** is a real-time multiplayer, Scrabble-like stacking word game: tiles
+stack on top of each other to change words. 2–4 players share a room and take
+turns; stack height determines scoring. Everything runs on Cloudflare.
 
 ## Stack
 
@@ -20,7 +18,7 @@ All infrastructure is Cloudflare-only — no separate server, no Docker, no exte
 ## Project structure
 
 ```
-upwords/
+wordstack/
 ├── frontend/              # React + Vite + TS (mobile-first UI)
 │   ├── src/
 │   └── vite.config.ts
@@ -93,12 +91,6 @@ npx wrangler deploy -c worker/wrangler.toml                                # wor
 See [docs/game-rules.md](docs/game-rules.md) for full rules and the tile distribution.
 
 ## Gotchas
-
-**Branding vs infra naming.** App is user-facing **Wordstack** (UI + custom domain
-`wordstack.aryaadarshagautam.com`); infra keeps the `upwords` name on purpose —
-Worker script, D1 `upwords-db`, the Room DO, `upwords:*` localStorage keys, the
-repo, and the `upwords.*.workers.dev` subdomain. **Don't rename these** — it would
-orphan DO storage and reset users.
 
 **Merriam-Webster compliance.** Never *persist* the MW response (no DO/KV/file/
 log). A transient in-memory `defCache` in the DO (5-min TTL, lost on hibernation)

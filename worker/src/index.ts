@@ -32,7 +32,7 @@ export default {
 
     // Health check — confirms the Worker (and its bindings) are live.
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, service: "upwords", ts: Date.now() });
+      return Response.json({ ok: true, service: "wordstack", ts: Date.now() });
     }
 
     // Definition lookup — live Merriam-Webster proxy. Called only when a player

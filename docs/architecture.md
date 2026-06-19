@@ -81,9 +81,8 @@ current player's in-progress tiles are broadcast live via `place_draft` →
 `state.draft` (transient, not persisted). On connect/reconnect the DO sends a full
 `state` snapshot.
 
-## Branding / infra naming gotcha
-The app is user-facing **Wordstack** (UI + custom domain
-`wordstack.aryaadarshagautam.com`), but all infrastructure keeps the original
-`upwords` name on purpose: Worker script, D1 `upwords-db`, the Room DO,
-`upwords:*` localStorage keys, the `upwords` repo, and the `upwords.*.workers.dev`
-subdomain. **Don't rename these** — it would orphan DO storage and reset users.
+## Naming
+Everything — UI, Worker script, the Room DO, `wordstack:*` localStorage keys, the
+repo, and the custom domain `wordstack.aryaadarshagautam.com` — uses the
+**Wordstack** name. (The project was historically named `upwords`; that legacy
+name has been retired across the codebase and infra.)

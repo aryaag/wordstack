@@ -1,6 +1,6 @@
 # Game rules
 
-From the physical Upwords edition. All values are tunable via
+Modeled on the classic physical stacking word game. All values are tunable via
 [`worker/src/engine/config.ts`](../worker/src/engine/config.ts) — the numbers
 below are the confirmed defaults.
 
