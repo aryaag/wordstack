@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { DEFAULT_CONFIG, extractWords } from "../../worker/src/engine";
 import type { DefineResult, PlayerState, PublicState, TurnRecord } from "../../worker/src/protocol";
 import { fetchDefinition } from "./useRoom";
@@ -511,6 +511,132 @@ export function WordLookup({ room, onClose }: { room?: string; onClose: () => vo
         </div>
 
         {word && <DefineResultView word={word} res={res} loading={loading} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Rules / how-to-play sheet (bottom sheet; reachable from every screen) ─────
+interface RuleSection {
+  title: string;
+  items: (string | JSX.Element)[];
+}
+
+const RULE_SECTIONS: RuleSection[] = [
+  {
+    title: "🎯 Goal",
+    items: [
+      "Build and stack words on a shared 10×10 board. Taller stacks score more.",
+      "When the game ends, the highest total score wins.",
+    ],
+  },
+  {
+    title: "🧩 Setup",
+    items: [
+      "2–4 players share one room and take turns.",
+      "Each player holds a rack of 7 tiles, refilled to 7 after every turn.",
+      "Tiles stack up to 5 high. Q comes as a combined “Qu” tile.",
+    ],
+  },
+  {
+    title: "▶️ On your turn (do exactly one)",
+    items: [
+      <><b>Play</b> — place tiles to form words, score, then refill your rack.</>,
+      <><b>Pass</b> — end your turn without playing (sometimes the smart move).</>,
+      <><b>Exchange</b> — swap exactly 1 tile back into the bag and draw a new one.</>,
+    ],
+  },
+  {
+    title: "📐 Placing tiles",
+    items: [
+      "All tiles you place in a turn go in a single row or column (across or down).",
+      "First move: at least 2 letters, and it must cover a center square.",
+      "After that, every new word of 2+ letters through your tiles must be valid.",
+      "Only one tile per cell per turn — you can’t stack twice on the same cell in one go.",
+    ],
+  },
+  {
+    title: "🗼 Stacking",
+    items: [
+      "Place on an empty cell, or on top of a stack that’s under 5 high.",
+      "You can’t place a letter on top of the same letter (no A on A).",
+      "You can’t change every tile of an existing word in one turn — at least one must remain.",
+    ],
+  },
+  {
+    title: "💯 Scoring",
+    items: [
+      "Flat word (all tiles height 1): 2 points per letter.",
+      "Stacked word (any tile height 2+): 1 point per height, summed across the word.",
+      "A tile shared by two words counts in both.",
+    ],
+  },
+  {
+    title: "✨ Bonuses",
+    items: [
+      "Qu bonus: +2 for a flat word using the Qu tile (per word it’s in).",
+      "Bingo: +20 for using all 7 rack tiles in a single turn.",
+    ],
+  },
+  {
+    title: "🚩 Challenges",
+    items: [
+      "There’s no dictionary referee — words are judged by the players.",
+      "After a turn, anyone can challenge a word or okay the move.",
+      "A challenge opens a vote; the word plays only if everyone allows it.",
+      "Tap “Define” any time to look a word up in Merriam-Webster (informational only).",
+    ],
+  },
+  {
+    title: "🚫 Not allowed",
+    items: [
+      "Proper nouns, abbreviations, acronyms, and symbols.",
+      "Hyphenated words or words needing an apostrophe.",
+      "Stand-alone prefixes/suffixes, and foreign words not in the dictionary.",
+    ],
+  },
+  {
+    title: "🏁 Endgame",
+    items: [
+      "Ends when someone empties their rack with the bag empty, or everyone passes in a row.",
+      "Then each leftover tile on your rack costs you 5 points.",
+      "Highest total score wins.",
+    ],
+  },
+];
+
+export function RulesSheet({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  return (
+    <div className="scrim bottom" onClick={onClose}>
+      <div className={`sheet rules-sheet${open ? " open" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className="grip" />
+        <div className="sheet-head">
+          <div>
+            <p className="t">How to play</p>
+            <p className="s">WordStack rules at a glance</p>
+          </div>
+          <button className="close" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <div className="rules-body">
+          {RULE_SECTIONS.map((sec) => (
+            <section key={sec.title} className="rule-sec">
+              <h3>{sec.title}</h3>
+              <ul>
+                {sec.items.map((it, i) => (
+                  <li key={i}>{it}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

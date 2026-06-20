@@ -9,7 +9,7 @@ import {
 import type { RoomConn } from "./useRoom";
 import { haptic, playPlace, playRecall } from "./sound";
 import { Board, cellKey, type Overlay } from "./board";
-import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, StackInspector, TurnReview, type InspectLayer } from "./overlays";
+import { ConfirmLeave, GameInfo, HistoryPanel, PlayerStrip, RulesSheet, StackInspector, TurnReview, type InspectLayer } from "./overlays";
 import { displayLetter, Icon, playedWords, Tile } from "./lib";
 
 interface Staged {
@@ -71,6 +71,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [slots, setSlots] = useState<(number | null)[]>([]);
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [ghost, setGhost] = useState<DragGhost | null>(null);
@@ -430,6 +431,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           )}
 
           <div className={`tray${isMyTurn ? " active" : ""}`}>
+            <button className="tray-rules" onClick={() => setRulesOpen(true)} aria-label="How to play">
+              <Icon name="scroll" size={15} /> Rules
+            </button>
             <div className="tray-turn">
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
@@ -509,6 +513,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       {historyOpen && (
         <HistoryPanel history={state.history} players={state.players} onClose={() => setHistoryOpen(false)} />
       )}
+      {rulesOpen && <RulesSheet onClose={() => setRulesOpen(false)} />}
       {confirmLeave && (
         <ConfirmLeave
           onCancel={() => setConfirmLeave(false)}

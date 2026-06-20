@@ -154,6 +154,8 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }): JSX.
       return <svg {...p}><path d="M13 5l7 7-7 7" /><path d="M4 12h16" /></svg>;
     case "ban":
       return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M5.64 5.64l12.72 12.72" /></svg>;
+    case "scroll":
+      return <svg {...p}><path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2z" /><path d="M6 4a2 2 0 0 0-2 2v2h2" /><path d="M9 8h7M9 12h7M9 16h4" /></svg>;
     default:
       return <svg {...p} />;
   }

@@ -399,6 +399,7 @@ svg {
   display: inline-block;
 }
 .tray {
+  position: relative;
   margin: 12px 0 0;
   padding: 11px;
   border-radius: var(--r-lg);
@@ -406,6 +407,23 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 9px;
+}
+.tray-rules {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-app);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 /* On your turn the rack keeps the beige fill but gets a slow blinking border. */
 .tray.active {
@@ -583,6 +601,11 @@ svg {
 .cta:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.cta.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-soft);
 }
 .or {
   width: 100%;
@@ -1163,6 +1186,38 @@ svg {
 .turns {
   overflow: auto;
   padding: 8px 14px 22px;
+}
+.rules-body {
+  overflow: auto;
+  padding: 6px 18px 28px;
+}
+.rule-sec {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rule-sec:last-child {
+  border-bottom: none;
+}
+.rule-sec h3 {
+  margin: 0 0 7px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.rule-sec ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rule-sec li {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+.rule-sec li b {
+  color: var(--text);
 }
 .turn {
   display: flex;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { type RoomConn } from "./useRoom";
 import { Icon, Tile } from "./lib";
+import { RulesSheet } from "./overlays";
 
 const LOGO = "WORDSTACK".split("");
 const RAISED: Record<number, number> = { 0: 2, 4: 3 }; // index → height badge + raised edge
@@ -28,6 +29,7 @@ export function HomePage({
   onJoinNav: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [rules, setRules] = useState(false);
   const host = async () => {
     setBusy(true);
     try {
@@ -62,6 +64,10 @@ export function HomePage({
       <button className="cta" style={{ marginTop: 10 }} onClick={onJoinNav}>
         Join game
       </button>
+      <button className="cta ghost" style={{ marginTop: 10 }} onClick={() => setRules(true)}>
+        <Icon name="scroll" /> How to play
+      </button>
+      {rules && <RulesSheet onClose={() => setRules(false)} />}
     </div>
   );
 }
@@ -79,6 +85,7 @@ export function JoinPage({
   onJoin: (code: string) => void;
 }) {
   const [code, setCode] = useState(initialCode.toUpperCase());
+  const [rules, setRules] = useState(false);
   const fromLink = !!initialCode;
 
   return (
@@ -125,6 +132,10 @@ export function JoinPage({
       >
         Join game
       </button>
+      <button className="cta ghost" style={{ marginTop: 10 }} onClick={() => setRules(true)}>
+        <Icon name="scroll" /> How to play
+      </button>
+      {rules && <RulesSheet onClose={() => setRules(false)} />}
     </div>
   );
 }
@@ -132,6 +143,7 @@ export function JoinPage({
 export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }) {
   const { state, me, start } = room;
   const [copied, setCopied] = useState(false);
+  const [rules, setRules] = useState(false);
   if (!state) return null;
   const isHost = state.hostId === me;
   const inviteLink = `${location.origin}/join?room=${state.code}`;
@@ -187,7 +199,11 @@ export function Lobby({ room, onLeave }: { room: RoomConn; onLeave: () => void }
         ) : (
           <p className="muted">Waiting for the host to start…</p>
         )}
+        <button className="cta ghost" style={{ marginTop: 10 }} onClick={() => setRules(true)}>
+          <Icon name="scroll" /> How to play
+        </button>
       </div>
+      {rules && <RulesSheet onClose={() => setRules(false)} />}
     </>
   );
 }
