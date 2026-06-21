@@ -20,9 +20,10 @@ interface Staged {
 /** Where a drag started: a rack slot or an already-staged board cell. */
 type DragSource = { kind: "rack"; rackIndex: number; slot: number } | { kind: "cell"; key: string };
 
-/** Rack has RACK_SLOTS positions (tiles + a few empty ones for spacing); each
- *  slot holds a rack-tile index or null. Players can drag tiles between slots. */
-const RACK_SLOTS = 10;
+/** Rack has RACK_SLOTS positions (tiles + empty ones for spacing/arranging); each
+ *  slot holds a rack-tile index or null. Players can drag tiles between slots.
+ *  14 = two rows of 7 on mobile; on wide screens a row of 10 + a row of 4. */
+const RACK_SLOTS = 14;
 
 /** Re-map slot→rackIndex after the rack changes so the player's arrangement
  *  survives a turn: tiles still in the rack keep their slot, played tiles leave
@@ -79,6 +80,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [toast, setToast] = useState<string | null>(null);
   const [ghost, setGhost] = useState<DragGhost | null>(null);
   const [hoverCell, setHoverCell] = useState<string | null>(null);
+  const [hoverSlot, setHoverSlot] = useState<string | null>(null);
   // Set true for one tick after a real drag so the trailing click is ignored.
   const suppressClick = useRef(false);
 
@@ -319,12 +321,18 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
 
     const cellAt = (x: number, y: number) =>
       document.elementFromPoint(x, y)?.closest("[data-cell]")?.getAttribute("data-cell") ?? null;
+    const slotAt = (x: number, y: number) =>
+      document.elementFromPoint(x, y)?.closest("[data-rack-slot]")?.getAttribute("data-rack-slot") ?? null;
 
     const onMove = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 6) return;
       moved = true;
       setGhost({ letter, x: ev.clientX, y: ev.clientY });
-      setHoverCell(cellAt(ev.clientX, ev.clientY));
+      const cell = cellAt(ev.clientX, ev.clientY);
+      setHoverCell(cell);
+      // Highlight the rack slot under the tile (the same blue "landing" cue the
+      // board gives) — but not while we're over a board cell.
+      setHoverSlot(cell ? null : slotAt(ev.clientX, ev.clientY));
     };
 
     const onUp = (ev: PointerEvent) => {
@@ -333,6 +341,7 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
       window.removeEventListener("pointercancel", onUp);
       setGhost(null);
       setHoverCell(null);
+      setHoverSlot(null);
       if (!moved) return; // treat as a tap
       suppressClick.current = true;
       setTimeout(() => (suppressClick.current = false), 0);
@@ -449,12 +458,17 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                 // Guard against a stale `slots` entry pointing past a shrunken rack
                 // (happens for one render after the bag empties) — render it empty.
                 const letter = ri == null ? undefined : myRack[ri];
+                const isTarget = hoverSlot === String(slotIdx);
                 return letter == null || ri == null ? (
-                  <div key={slotIdx} className="rack-slot empty" data-rack-slot={slotIdx} />
+                  <div
+                    key={slotIdx}
+                    className={`rack-slot empty${isTarget ? " drop-target" : ""}`}
+                    data-rack-slot={slotIdx}
+                  />
                 ) : (
                   <div
                     key={slotIdx}
-                    className={`rack-slot${dealing ? " deal-in" : ""}`}
+                    className={`rack-slot${dealing ? " deal-in" : ""}${isTarget ? " drop-target" : ""}`}
                     data-rack-slot={slotIdx}
                     style={dealing ? { animationDelay: `${slotIdx * 35}ms` } : undefined}
                   >
@@ -474,30 +488,30 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                   </div>
                 );
               })}
+              {isMyTurn && (
+                <div className="actions">
+                  <button
+                    className="round-btn"
+                    onClick={() => room.pass()}
+                    disabled={staged.size > 0}
+                    aria-label="Skip turn"
+                  >
+                    <Icon name="ban" size={18} />
+                  </button>
+                  <button
+                    className="round-btn"
+                    onClick={swap}
+                    disabled={staged.size > 0 || selected === null || state.bagCount === 0}
+                    aria-label="Swap selected tile"
+                  >
+                    <Icon name="swap" size={18} />
+                  </button>
+                  <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Submit">
+                    <Icon name="check" size={22} />
+                  </button>
+                </div>
+              )}
             </div>
-            {isMyTurn && (
-              <div className="actions">
-                <button
-                  className="round-btn"
-                  onClick={() => room.pass()}
-                  disabled={staged.size > 0}
-                  aria-label="Skip turn"
-                >
-                  <Icon name="ban" size={18} />
-                </button>
-                <button
-                  className="round-btn"
-                  onClick={swap}
-                  disabled={staged.size > 0 || selected === null || state.bagCount === 0}
-                  aria-label="Swap selected tile"
-                >
-                  <Icon name="swap" size={18} />
-                </button>
-                <button className="round-btn commit" onClick={commit} disabled={!valid} aria-label="Submit">
-                  <Icon name="check" size={22} />
-                </button>
-              </div>
-            )}
           </div>
         </div>
 

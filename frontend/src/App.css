@@ -485,11 +485,28 @@ svg {
   border-radius: 16%;
   opacity: 0.45;
 }
+/* The rack slot currently under a dragged tile — same blue "landing" cue the
+   board gives a target cell. */
+.rack-slot.drop-target.empty {
+  border-style: solid;
+  border-color: var(--new-edge);
+  background: var(--info-bg, #e6effb);
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px var(--new-edge);
+}
+.rack-slot.drop-target .tile {
+  outline: 2px solid var(--new-edge);
+  outline-offset: 1px;
+}
 .actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 14px;
+  /* Mobile: the action buttons sit on their own full-width row below the two
+     rows of rack tiles (the rack is a flex-wrap grid). */
+  flex: 1 1 100%;
+  margin-top: 4px;
 }
 .round-btn {
   width: 42px;
@@ -1370,6 +1387,15 @@ svg {
   }
   .rack-slot {
     min-width: 0;
+  }
+  /* Wide: row 1 is the 10 slots, row 2 holds the 4 spare slots (cols 1–4) and
+     the action buttons share that line, anchored to the right (cols 6–10). */
+  .rack .actions {
+    grid-column: 6 / 11;
+    grid-row: 2;
+    align-self: center;
+    flex: initial;
+    margin-top: 0;
   }
 }
 
