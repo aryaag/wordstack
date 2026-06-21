@@ -72,6 +72,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
   const [inspect, setInspect] = useState<InspectLayer[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  // True only briefly after a rack refill, so the deal-in animation plays on a
+  // fresh deal but NOT when the player drags tiles around their own rack.
+  const [dealing, setDealing] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [ghost, setGhost] = useState<DragGhost | null>(null);
@@ -99,6 +102,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
     prevRackRef.current = newRack;
     setStaged(new Map());
     setSelected(null);
+    setDealing(true);
+    const t = setTimeout(() => setDealing(false), 500);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rackKey]);
 
@@ -387,6 +393,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
         </span>
         <span className="right">
           <span className="room">{state.code}</span>
+          <button className="icon-btn" onClick={() => setRulesOpen(true)} aria-label="How to play">
+            <Icon name="scroll" size={19} />
+          </button>
           {me === state.hostId && state.canUndo && phase === "playing" && (
             <button className="icon-btn" onClick={() => room.undo()} aria-label="Undo last move">
               <Icon name="undo" size={19} />
@@ -431,9 +440,6 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
           )}
 
           <div className={`tray${isMyTurn ? " active" : ""}`}>
-            <button className="tray-rules" onClick={() => setRulesOpen(true)} aria-label="How to play">
-              <Icon name="scroll" size={15} /> Rules
-            </button>
             <div className="tray-turn">
               {isMyTurn ? "Your turn" : `${current?.name ?? "—"}'s turn`}
               {!isMyTurn && current && !current.connected && phase === "playing" && " · reconnecting…"}
@@ -448,9 +454,9 @@ export function Game({ room, onLeave }: { room: RoomConn; onLeave: () => void })
                 ) : (
                   <div
                     key={slotIdx}
-                    className="rack-slot deal-in"
+                    className={`rack-slot${dealing ? " deal-in" : ""}`}
                     data-rack-slot={slotIdx}
-                    style={{ animationDelay: `${slotIdx * 35}ms` }}
+                    style={dealing ? { animationDelay: `${slotIdx * 35}ms` } : undefined}
                   >
                     <Tile
                       letter={letter}

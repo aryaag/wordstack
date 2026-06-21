@@ -399,7 +399,6 @@ svg {
   display: inline-block;
 }
 .tray {
-  position: relative;
   margin: 12px 0 0;
   padding: 11px;
   border-radius: var(--r-lg);
@@ -407,23 +406,6 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 9px;
-}
-.tray-rules {
-  position: absolute;
-  top: 9px;
-  right: 9px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--bg-app);
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
 /* On your turn the rack keeps the beige fill but gets a slow blinking border. */
 .tray.active {
